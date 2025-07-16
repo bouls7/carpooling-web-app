@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.container {
+  font-family: 'Poppins', sans-serif;
+  max-width: 920px;
+  margin: 6rem auto 8rem;
+  padding: 3.5rem 3rem;
+  background-color: #ffffff;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  color: #1e293b;
+  display: flex;
+  flex-direction: column;
+  gap: 2.2rem;
+  line-height: 1.8;
+  animation: fadeInUp 0.8s ease-in-out forwards;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 3.5rem;
+  color: #dc2626; /* red title text */
+  border-bottom: 5px solid #dc2626; /* red underline */
+  padding-bottom: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  user-select: none;
+  margin-bottom: 1.5rem;
+}
+
+.contentSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.8rem;
+}
+
+.paragraph {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: #475569;
+  max-width: 800px;
+}
+
+.noticeBox {
+  background: #fef2f2;
+  border-left: 6px solid #fecaca;
+  padding: 1.25rem 1.5rem;
+  border-radius: 10px;
+  font-size: 1.15rem;
+  color: #dc2626;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(255, 0, 0, 0.08);
+  transition: box-shadow 0.4s ease;
+  max-width: 800px;
+  outline: none;
+}
+
+.noticeBox:focus,
+.noticeBox:hover {
+  box-shadow: 0 10px 24px rgba(239, 68, 68, 0.2);
+}
+
+.noticeLabel {
+  display: inline-block;
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #ef4444;
+}
+
+@media (max-width: 700px) {
+  .container {
+    margin: 4rem 1.2rem 5rem;
+    padding: 2rem 1.5rem;
+  }
+
+  .title {
+    font-size: 2.6rem;
+  }
+
+  .paragraph,
+  .noticeBox {
+    font-size: 1.05rem;
+  }
+}

@@ -1,0 +1,59 @@
+.account-info-container {
+  max-width: 480px;
+  margin: 3rem auto;
+  padding: 2rem;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 8px 16px rgb(0 0 0 / 0.1);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: #333;
+}
+
+.account-title {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  color: #0d6efd; /* bootstrap primary blue */
+}
+
+.account-detail {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.label {
+  font-weight: 600;
+  color: #555;
+}
+
+.value {
+  font-weight: 400;
+  color: #222;
+  max-width: 60%;
+  word-wrap: break-word;
+  text-align: right;
+}
+
+.id-scan-link {
+  color: #0d6efd;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.id-scan-link:hover {
+  text-decoration: underline;
+}
+
+.no-account-msg {
+  max-width: 480px;
+  margin: 3rem auto;
+  padding: 1rem 2rem;
+  text-align: center;
+  font-size: 1.2rem;
+  color: #888;
+  font-style: italic;
+}

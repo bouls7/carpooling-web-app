@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+:root {
+  --primary-color: #4f46e5;
+  --background-color: #fafafa;
+  --text-color-main: #2e3a59;
+  --text-color-secondary: #4b5366;
+  --highlight-bg: #eef2ff;
+  --highlight-border: #c7d2fe;
+  --shadow: rgba(0, 0, 0, 0.1);
+  --transition-duration: 0.4s;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.container {
+  font-family: 'Inter', sans-serif;
+  max-width: 900px;
+  margin: 5rem auto 7rem;
+  padding: 3rem 2.5rem;
+  background: var(--background-color);
+  box-shadow: 0 10px 30px var(--shadow);
+  border-radius: 12px;
+  color: var(--text-color-main);
+  line-height: 1.7;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  animation: fadeInUp 0.8s ease forwards;
+  outline-offset: 10px;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 3rem;
+  border-left: 6px solid var(--primary-color);
+  padding-left: 1.25rem;
+  color: #373f68;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  user-select: none;
+  margin-bottom: 1rem;
+}
+
+.contentSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.paragraph {
+  font-weight: 400;
+  font-size: 1.18rem;
+  color: var(--text-color-secondary);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.highlightBox {
+  background: var(--highlight-bg);
+  border-left: 5px solid var(--highlight-border);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  font-size: 1.15rem;
+  color: var(--primary-color);
+  max-width: 800px;
+  margin: 0 auto;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.15);
+  transition: box-shadow var(--transition-duration) ease;
+  cursor: default;
+}
+
+.highlightBox:focus,
+.highlightBox:hover {
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.3);
+  outline: none;
+}
+
+@media (max-width: 600px) {
+  .container {
+    margin: 3rem 1rem 4rem;
+    padding: 2rem 1.5rem;
+  }
+
+  .title {
+    font-size: 2.2rem;
+    padding-left: 1rem;
+  }
+
+  .paragraph,
+  .highlightBox {
+    font-size: 1rem;
+    max-width: 100%;
+  }
+}
