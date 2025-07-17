@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "../styles/SignUp.css";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { signupUser, loginUser } from "../api/authService";
 
 export default function SignUp() {
   const [formData, setFormData] = useState({
@@ -17,20 +18,25 @@ export default function SignUp() {
 
   const [isLoginMode, setIsLoginMode] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
-
-  // Password visibility states
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const navigate = useNavigate();
-  const { addAccount, switchAccount, findAccountByEmailAndPassword } = useAuth();
+  const { accounts, activeAccount, addAccount, switchAccount } = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (activeAccount) {
+      navigate("/");
+    }
+  }, [activeAccount, navigate]);
 
   const showPopup = (message, callback = null) => {
     setPopupMessage(message);
     setTimeout(() => {
       setPopupMessage("");
       if (callback) callback();
-    }, 1000);
+    }, 2000);
   };
 
   const handleChange = (e) => {
@@ -42,9 +48,7 @@ export default function SignUp() {
     setFormData((prev) => ({ ...prev, idScan: e.target.files[0] }));
   };
 
-  const generateId = () => Date.now();
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (formData.password.length < 8) {
@@ -53,16 +57,42 @@ export default function SignUp() {
     }
 
     if (isLoginMode) {
-      const found = findAccountByEmailAndPassword(formData.email, formData.password);
-      if (found) {
-        switchAccount(found.id);
-        showPopup("Login successful. Redirecting...", () => navigate("/"));
-      } else {
-        showPopup("Invalid email or password.");
+      try {
+        const token = await loginUser({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        localStorage.setItem("token", token);
+
+        // Find existing account by email
+        const existingAccount = accounts.find(
+          (acc) => acc.email === formData.email
+        );
+
+        if (existingAccount) {
+          switchAccount(existingAccount.id);
+        } else {
+          const newId = addAccount({
+            email: formData.email,
+            token,
+            role: "passenger",
+          });
+          switchAccount(newId);
+        }
+
+        showPopup("Login successful! Redirecting...", () => navigate("/"));
+      } catch (err) {
+        showPopup(
+          err?.response?.data?.message ||
+            err.message ||
+            "Login failed. Please check credentials."
+        );
       }
       return;
     }
 
+    // Signup validation
     if (!/^[a-zA-Z\s]+$/.test(formData.fullName)) {
       showPopup("Full Name must contain only letters and spaces.");
       return;
@@ -84,26 +114,46 @@ export default function SignUp() {
       }
     }
 
-    const newAccount = {
-      id: generateId(),
-      username: formData.fullName,
-      email: formData.email,
-      password: formData.password,
-      role: formData.role,
-      licenseNumber: formData.role === "driver" ? formData.licenseNumber : null,
-      idScan: formData.role === "driver" ? formData.idScan : null,
-      rideHistory: [],
-    };
+    try {
+      // Signup user
+      await signupUser({
+        fullName: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+      });
 
-    addAccount(newAccount);
-    showPopup("Account created successfully. Redirecting...", () => navigate("/"));
+      // Auto login after signup
+      const token = await loginUser({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      localStorage.setItem("token", token);
+
+      const newId = addAccount({
+        email: formData.email,
+        token,
+        role: formData.role,
+      });
+      switchAccount(newId);
+
+      showPopup("Signup successful! Redirecting...", () => navigate("/"));
+    } catch (err) {
+      showPopup(
+        err?.response?.data?.message || err.message || "Signup failed."
+      );
+    }
   };
 
   return (
     <div className="signup-container">
       <h2>{isLoginMode ? "Log In to Your Account" : "Create an Account"}</h2>
 
-      <form onSubmit={handleSubmit} className="signup-form" encType="multipart/form-data">
+      <form
+        onSubmit={handleSubmit}
+        className="signup-form"
+        encType="multipart/form-data"
+      >
         {!isLoginMode && (
           <input
             type="text"
@@ -124,7 +174,6 @@ export default function SignUp() {
           required
         />
 
-        {/* Password input with toggle */}
         <div className="password-wrapper">
           <input
             type={showPassword ? "text" : "password"}
@@ -139,10 +188,6 @@ export default function SignUp() {
             onClick={() => setShowPassword((prev) => !prev)}
             role="button"
             tabIndex={0}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") setShowPassword((prev) => !prev);
-            }}
           >
             {showPassword ? <FaEyeSlash /> : <FaEye />}
           </span>
@@ -150,7 +195,6 @@ export default function SignUp() {
 
         {!isLoginMode && (
           <>
-            {/* Confirm password input with toggle */}
             <div className="password-wrapper">
               <input
                 type={showConfirmPassword ? "text" : "password"}
@@ -165,10 +209,6 @@ export default function SignUp() {
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
                 role="button"
                 tabIndex={0}
-                aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") setShowConfirmPassword((prev) => !prev);
-                }}
               >
                 {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
               </span>
@@ -176,15 +216,23 @@ export default function SignUp() {
 
             <div className="role-selection">
               <div
-                className={`role-option ${formData.role === "passenger" ? "selected" : ""}`}
-                onClick={() => setFormData((prev) => ({ ...prev, role: "passenger" }))}
+                className={`role-option ${
+                  formData.role === "passenger" ? "selected" : ""
+                }`}
+                onClick={() =>
+                  setFormData((prev) => ({ ...prev, role: "passenger" }))
+                }
               >
                 <div className="icon">🧍</div>
                 <div className="label">Passenger</div>
               </div>
               <div
-                className={`role-option ${formData.role === "driver" ? "selected" : ""}`}
-                onClick={() => setFormData((prev) => ({ ...prev, role: "driver" }))}
+                className={`role-option ${
+                  formData.role === "driver" ? "selected" : ""
+                }`}
+                onClick={() =>
+                  setFormData((prev) => ({ ...prev, role: "driver" }))
+                }
               >
                 <div className="icon">🚗</div>
                 <div className="label">Driver</div>
@@ -224,7 +272,10 @@ export default function SignUp() {
 
       <p style={{ marginTop: "12px" }}>
         {isLoginMode ? "Don't have an account?" : "Already have an account?"}{" "}
-        <span onClick={() => setIsLoginMode((prev) => !prev)} className="toggle-link">
+        <span
+          onClick={() => setIsLoginMode((prev) => !prev)}
+          className="toggle-link"
+        >
           {isLoginMode ? "Sign Up" : "Log In"}
         </span>
       </p>

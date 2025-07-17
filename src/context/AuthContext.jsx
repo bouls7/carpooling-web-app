@@ -4,23 +4,26 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [accounts, setAccounts] = useState([]); // Array of user accounts
-  const [activeAccountId, setActiveAccountId] = useState(null); // Active user ID
+  const [accounts, setAccounts] = useState(() => {
+    const storedAccounts = localStorage.getItem("accounts");
+    return storedAccounts ? JSON.parse(storedAccounts) : [];
+  });
 
-  // Load accounts from localStorage
-  useEffect(() => {
-    const storedAccounts = JSON.parse(localStorage.getItem("accounts")) || [];
-    const storedActiveId = JSON.parse(localStorage.getItem("activeAccountId"));
-    setAccounts(storedAccounts);
-    setActiveAccountId(storedActiveId);
-  }, []);
+  const [activeAccountId, setActiveAccountId] = useState(() => {
+    const storedActiveId = localStorage.getItem("activeAccountId");
+    return storedActiveId ? JSON.parse(storedActiveId) : null;
+  });
 
-  // Save accounts to localStorage on change
+  // Save accounts and activeAccountId to localStorage on change
   useEffect(() => {
     localStorage.setItem("accounts", JSON.stringify(accounts));
-    localStorage.setItem("activeAccountId", JSON.stringify(activeAccountId));
-  }, [accounts, activeAccountId]);
+  }, [accounts]);
 
+  useEffect(() => {
+    localStorage.setItem("activeAccountId", JSON.stringify(activeAccountId));
+  }, [activeAccountId]);
+
+  // Find activeAccount object from accounts by activeAccountId
   const activeAccount = accounts.find(acc => acc.id === activeAccountId) || null;
   const isLoggedIn = activeAccountId !== null;
 
@@ -37,11 +40,13 @@ export const AuthProvider = ({ children }) => {
     );
   };
 
+  // Modified: returns the new account's ID after adding
   const addAccount = (account) => {
     const newAccount = { ...account, id: Date.now(), rideHistory: [] };
     const updatedAccounts = [...accounts, newAccount];
     setAccounts(updatedAccounts);
     setActiveAccountId(newAccount.id);
+    return newAccount.id; // <-- return ID to caller
   };
 
   const switchAccount = (accountId) => {
@@ -53,7 +58,6 @@ export const AuthProvider = ({ children }) => {
     const updatedAccounts = accounts.filter(acc => acc.id !== accountId);
     setAccounts(updatedAccounts);
 
-    // If the removed account was the active one, try to switch to another
     if (activeAccountId === accountId) {
       const fallbackAccount = updatedAccounts[0]?.id || null;
       setActiveAccountId(fallbackAccount);

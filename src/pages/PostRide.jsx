@@ -12,6 +12,7 @@ export default function PostRide() {
   const [price, setPrice] = useState("");
   const [carModel, setCarModel] = useState("");
   const [carNumber, setCarNumber] = useState("");
+  const [seats, setSeats] = useState("");  // <-- new state for seats
   const [successMessage, setSuccessMessage] = useState("");
 
   if (!isLoggedIn || role !== "driver") {
@@ -21,7 +22,6 @@ export default function PostRide() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Normally send this data to your backend
     const rideData = {
       driver: {
         name: user?.name || "Anonymous Driver",
@@ -31,9 +31,9 @@ export default function PostRide() {
       startLocation,
       endLocation,
       price,
+      seats,  // <-- include seats here
     };
 
-    // Simulate storing the ride
     localStorage.setItem("postedRide", JSON.stringify(rideData));
 
     setSuccessMessage("Ride posted successfully!");
@@ -42,6 +42,7 @@ export default function PostRide() {
     setPrice("");
     setCarModel("");
     setCarNumber("");
+    setSeats("");  // <-- reset seats field
   };
 
   return (
@@ -77,6 +78,8 @@ export default function PostRide() {
           value={price}
           onChange={(e) => setPrice(e.target.value)}
           required
+          min="0"
+          step="0.01"
         />
 
         <label htmlFor="carModel">Car Model</label>
@@ -97,6 +100,17 @@ export default function PostRide() {
           value={carNumber}
           onChange={(e) => setCarNumber(e.target.value)}
           required
+        />
+
+        <label htmlFor="seats">Seats Available</label>
+        <input
+          id="seats"
+          type="number"
+          placeholder="e.g. 3"
+          value={seats}
+          onChange={(e) => setSeats(e.target.value)}
+          required
+          min="1"
         />
 
         <button type="submit" className="post-ride-btn">Submit Ride</button>

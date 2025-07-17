@@ -1,16 +1,29 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { FaUserCircle, FaUserPlus } from "react-icons/fa";
 import logo from "../assets/logo.png";
 import "../styles/Navbar.css";
 import { useAuth } from "../context/AuthContext";
 
-
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
   const { activeAccount, accounts, logoutActive } = useAuth();
   const navigate = useNavigate();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleOutsideClick(event) {
+      if (
+        !event.target.closest(".account-switcher") &&
+        !event.target.closest(".account-dropdown-menu")
+      ) {
+        setAccountsOpen(false);
+      }
+    }
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, []);
 
   const handleAddAccount = () => {
     setAccountsOpen(false);
@@ -73,11 +86,11 @@ export default function Navbar() {
           </>
         )}
 
-        {accounts.length > 0 ? (
+        {activeAccount ? (
           <li className="account-switcher account-dropdown">
             <button
               className="account-icon-button"
-              onClick={() => setAccountsOpen(!accountsOpen)}
+              onClick={() => setAccountsOpen((prev) => !prev)}
               aria-haspopup="true"
               aria-label="Account Options"
               aria-expanded={accountsOpen}
@@ -86,7 +99,7 @@ export default function Navbar() {
             </button>
 
             {accountsOpen && (
-              <ul className="account-dropdown-menu">
+              <ul className="account-dropdown-menu" role="menu">
                 <li>
                   <button
                     className="account-dropdown-item"
@@ -94,6 +107,7 @@ export default function Navbar() {
                       navigate("/accounts");
                       setAccountsOpen(false);
                     }}
+                    role="menuitem"
                   >
                     View Account Info
                   </button>
@@ -105,6 +119,7 @@ export default function Navbar() {
                     onClick={handleAddAccount}
                     aria-label="Add New Account"
                     title="Add New Account"
+                    role="menuitem"
                   >
                     <FaUserPlus />
                     Add New Account
@@ -117,7 +132,9 @@ export default function Navbar() {
                     onClick={() => {
                       logoutActive();
                       setAccountsOpen(false);
+                      navigate("/");
                     }}
+                    role="menuitem"
                   >
                     Logout Current Account
                   </button>

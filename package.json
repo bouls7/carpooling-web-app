@@ -13,6 +13,7 @@
     "@geoapify/geocoder-autocomplete": "^2.1.0",
     "@geoapify/react-geocoder-autocomplete": "^2.0.1",
     "@react-google-maps/api": "^2.20.7",
+    "axios": "^1.10.0",
     "leaflet": "^1.9.4",
     "mapbox-gl": "^3.13.0",
     "react": "^19.1.0",
