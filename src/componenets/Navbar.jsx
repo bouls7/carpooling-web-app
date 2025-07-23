@@ -92,7 +92,6 @@ export default function Navbar() {
               className="account-icon-button"
               onClick={() => setAccountsOpen((prev) => !prev)}
               aria-haspopup="true"
-              aria-label="Account Options"
               aria-expanded={accountsOpen}
             >
               <FaUserCircle size={24} />
@@ -117,8 +116,6 @@ export default function Navbar() {
                   <button
                     className="account-dropdown-item"
                     onClick={handleAddAccount}
-                    aria-label="Add New Account"
-                    title="Add New Account"
                     role="menuitem"
                   >
                     <FaUserPlus />

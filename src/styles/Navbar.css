@@ -1,4 +1,3 @@
-/* Reset & basics */
 html, body, #root {
   height: 100%;
   margin: 0;
@@ -6,7 +5,6 @@ html, body, #root {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* Navbar container */
 .navbar {
   display: flex;
   justify-content: space-between;
@@ -17,10 +15,10 @@ html, body, #root {
   position: sticky;
   top: 0;
   z-index: 1000;
+  position: relative;
   flex-wrap: wrap;
 }
 
-/* Logo styles */
 .logo-container {
   display: flex;
   align-items: center;
@@ -39,29 +37,26 @@ html, body, #root {
   color: #007bff;
 }
 
-/* Navigation links container */
 .nav-links {
   list-style: none;
-  display: flex !important;  /* force horizontal flex layout */
+  display: flex;
   align-items: center;
   gap: 1.5rem;
   margin: 0;
   padding: 0;
+  z-index: 1100;
 }
 
-/* Each nav-links <li> and account-switcher align items inline-flex centered */
 .nav-links li,
 .account-switcher {
   display: inline-flex;
   align-items: center;
 }
 
-/* Add spacing after account-switcher */
 .account-switcher {
   margin-left: 1rem;
 }
 
-/* Nav link styling */
 .nav-link {
   text-decoration: none;
   color: #333;
@@ -79,8 +74,6 @@ html, body, #root {
   border-bottom: 2px solid #007bff;
 }
 
-
-/* Hamburger Menu for mobile */
 .hamburger {
   display: none;
   flex-direction: column;
@@ -100,18 +93,12 @@ html, body, #root {
 .hamburger.open div:nth-child(1) {
   transform: rotate(45deg) translate(5px, 5px);
 }
-
 .hamburger.open div:nth-child(2) {
   opacity: 0;
 }
-
 .hamburger.open div:nth-child(3) {
-  transform: rotate(-45deg) translate(15px, -15px);
+  transform: rotate(-45deg) translate(5px, -5px);
 }
-
-/* ============================
-   Account Dropdown Styles
-   ============================ */
 
 .account-dropdown {
   position: relative;
@@ -130,19 +117,14 @@ html, body, #root {
   padding: 12px;
   border-radius: 50%;
   cursor: pointer;
-  transition: 
-    background-color 0.35s ease, 
-    box-shadow 0.35s ease, 
-    transform 0.3s ease,
-    color 0.3s ease;
+  transition: all 0.3s ease;
   box-shadow: 0 8px 15px rgba(44, 62, 80, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.account-icon-button:hover,
-.account-icon-button:focus {
+.account-icon-button:hover {
   background: rgba(255, 255, 255, 0.3);
   color: #1d4ed8;
   box-shadow: 0 12px 30px rgba(29, 78, 216, 0.35);
@@ -161,8 +143,9 @@ html, body, #root {
   border: 1.8px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
   overflow: hidden;
-  animation: fadeSlideIn 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+  animation: fadeSlideIn 0.35s ease forwards;
   user-select: none;
+  z-index: 9999;
 }
 
 @keyframes fadeSlideIn {
@@ -174,10 +157,6 @@ html, body, #root {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.account-dropdown-menu li {
-  list-style: none;
 }
 
 .account-dropdown-item {
@@ -194,11 +173,7 @@ html, body, #root {
   align-items: center;
   gap: 14px;
   border-left: 4px solid transparent;
-  transition: 
-    background-color 0.3s ease, 
-    color 0.3s ease, 
-    border-color 0.3s ease;
-  user-select: none;
+  transition: all 0.3s ease;
 }
 
 .account-dropdown-item:hover {
@@ -208,71 +183,21 @@ html, body, #root {
   box-shadow: inset 4px 0 8px rgba(67, 56, 202, 0.3);
 }
 
-.account-dropdown-item.active {
-  background-color: #c7d2fe;
-  font-weight: 700;
-  color: #1e40af;
-  border-left: 4px solid #4338ca;
-  box-shadow: inset 4px 0 8px rgba(67, 56, 202, 0.5);
-}
-
 .logout-btn {
   color: #dc2626;
   font-weight: 700;
-  letter-spacing: 0.03em;
-  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .logout-btn:hover {
   background-color: #fef2f2;
   color: #991b1b;
-  box-shadow: inset 0 0 10px #991b1baa;
 }
 
-.view-info-btn {
-  width: 100%;
-  padding: 0.85rem 1.5rem;
-  background: linear-gradient(90deg, #4f46e5 0%, #3730a3 100%);
-  color: #fff;
-  font-weight: 700;
-  font-size: 1rem;
-  border: none;
-  border-radius: 0 0 20px 20px;
-  cursor: pointer;
-  transition: background 0.35s ease, box-shadow 0.35s ease;
-  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.6);
-  user-select: none;
-}
-
-.view-info-btn:hover {
-  background: linear-gradient(90deg, #3730a3 0%, #1e3a8a 100%);
-  box-shadow: 0 8px 30px rgba(55, 48, 163, 0.8);
-}
-
-.no-accounts-msg {
-  padding: 1.2rem;
-  text-align: center;
-  font-style: italic;
-  font-size: 0.95rem;
-  color: #6b7280;
-  user-select: none;
-}
-
-hr {
-  margin: 0.75rem 0;
-  border: none;
-  border-top: 1px solid rgba(229, 231, 235, 0.5);
-}
-
-
-/* Responsive styles */
 @media (max-width: 768px) {
-  /* Show hamburger */
   .hamburger {
     display: flex;
   }
 
-  /* Hide nav links by default */
   .nav-links {
     display: none;
     flex-direction: column;
@@ -284,7 +209,6 @@ hr {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   }
 
-  /* Show nav links when open */
   .nav-links.open {
     display: flex;
   }
@@ -295,17 +219,7 @@ hr {
   }
 
   .nav-link {
-    display: inline-block;
     color: #333;
     font-weight: 500;
-    text-decoration: none;
-    padding-bottom: 4px;
-    border-bottom: 2px solid transparent;
-  }
-
-  .nav-link:hover,
-  .nav-link:focus {
-    color: #007bff;
-    border-bottom-color: #007bff;
   }
 }

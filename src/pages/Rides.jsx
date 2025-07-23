@@ -20,7 +20,17 @@ const LocationIcon = ({ color }) => (
   </svg>
 );
 
+function debounce(func, delay) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => func.apply(this, args), delay);
+  };
+}
+
 const Rides = () => {
+  const apiKey = "b20fbcf917ef4227ba363e7b7db7515b"; 
+
   const [center, setCenter] = useState(defaultCenter);
 
   const [startLocation, setStartLocation] = useState("");
@@ -29,12 +39,15 @@ const Rides = () => {
   const [startCoords, setStartCoords] = useState(null);
   const [endCoords, setEndCoords] = useState(null);
 
-  const [rideRequested, setRideRequested] = useState(false);
-  const [rideInfo, setRideInfo] = useState(null);
+  const [startSuggestions, setStartSuggestions] = useState([]);
+  const [endSuggestions, setEndSuggestions] = useState([]);
+
   const [routeCoords, setRouteCoords] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const [nearbyRides, setNearbyRides] = useState([]);
 
   const { activeAccount, addRideHistory } = useAuth();
   const navigate = useNavigate();
@@ -50,24 +63,43 @@ const Rides = () => {
     );
   }, []);
 
-  const clearStart = () => {
-    setStartLocation("");
-    setStartCoords(null);
-    setRideRequested(false);
-    setRouteCoords([]);
-    setErrorMsg("");
-  };
+  // Fetch autocomplete suggestions
+const fetchSuggestions = async (query, setSuggestions) => {
+  if (!query) {
+    setSuggestions([]);
+    return;
+  }
 
-  const clearEnd = () => {
-    setEndLocation("");
-    setEndCoords(null);
-    setRideRequested(false);
-    setRouteCoords([]);
-    setErrorMsg("");
-  };
+  const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
+    query
+  )}&limit=5&apiKey=${apiKey}`;
 
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    // FIX: Geoapify uses `results`, not `features`
+    const filteredResults = (data.results || []).filter(
+      (place) => place && place.properties && place.properties.formatted
+    );
+    setSuggestions(filteredResults);
+  } catch (err) {
+    console.error("Autocomplete fetch error:", err);
+    setSuggestions([]);
+  }
+};
+
+
+  const debouncedFetchStartSuggestions = debounce(
+    (val) => fetchSuggestions(val, setStartSuggestions),
+    300
+  );
+  const debouncedFetchEndSuggestions = debounce(
+    (val) => fetchSuggestions(val, setEndSuggestions),
+    300
+  );
+
+  // Geocode address to coords
   const geocodeAddress = async (address) => {
-    const apiKey = "YOUR_GEOAPIFY_API_KEY"; // Replace with your Geoapify API key
     const response = await fetch(
       `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(
         address
@@ -82,13 +114,32 @@ const Rides = () => {
     }
   };
 
+  // Fetch nearby rides from backend (mocked here)
+  useEffect(() => {
+    if (!startCoords) return;
+
+    async function fetchNearbyRides() {
+      try {
+        // Replace with your backend API endpoint:
+        const res = await fetch(
+          `/api/rides?nearLat=${startCoords[0]}&nearLon=${startCoords[1]}`
+        );
+        const data = await res.json();
+        setNearbyRides(data);
+      } catch (err) {
+        console.error("Nearby rides fetch error:", err);
+        setNearbyRides([]);
+      }
+    }
+
+    fetchNearbyRides();
+  }, [startCoords]);
+
+  // Handle ride request button
   const handleRequestRide = async () => {
     setErrorMsg("");
     setLoading(true);
-    setRideRequested(false);
     setRouteCoords([]);
-    setRideInfo(null);
-
     try {
       if (!startLocation || !endLocation) {
         setErrorMsg("Please enter both start and end locations.");
@@ -96,46 +147,63 @@ const Rides = () => {
         return;
       }
 
-      const start = await geocodeAddress(startLocation);
-      setStartCoords(start);
+      let start = startCoords;
+      let end = endCoords;
 
-      const end = await geocodeAddress(endLocation);
-      setEndCoords(end);
+      if (!start) {
+        start = await geocodeAddress(startLocation);
+        setStartCoords(start);
+      }
+      if (!end) {
+        end = await geocodeAddress(endLocation);
+        setEndCoords(end);
+      }
 
-      const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
+      // Geoapify routing API (CORS friendly)
+      const url = `https://api.geoapify.com/v1/routing?waypoints=${start[0]},${start[1]}|${end[0]},${end[1]}&mode=drive&apiKey=${apiKey}`;
       const res = await fetch(url);
       const data = await res.json();
 
-      if (!data.routes || data.routes.length === 0) {
+      if (!data.features || data.features.length === 0) {
         setErrorMsg("No route found.");
         setLoading(false);
         return;
       }
 
-      const coords = data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]);
+      const coords = data.features[0].geometry.coordinates.map((c) => [c[1], c[0]]);
       setRouteCoords(coords);
 
-      const distanceKm = data.routes[0].distance / 1000;
-      const fare = `$${(distanceKm * 0.5).toFixed(2)}`;
-
-      const newRide = {
+      // Add ride history (optional)
+      addRideHistory({
         id: Date.now(),
         startLocation,
         endLocation,
-        fare,
+        fare: `$${(data.features[0].properties.distance / 1000 * 0.5).toFixed(2)}`,
         driver: "John Smith",
         estimatedTime: "~5 mins",
         date: new Date().toLocaleString(),
-      };
-
-      setRideInfo(newRide);
-      setRideRequested(true);
-      addRideHistory(newRide);
+      });
     } catch (error) {
+      console.error("Route fetch error:", error);
       setErrorMsg(error.message || "Failed to get route info, please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearStart = () => {
+    setStartLocation("");
+    setStartCoords(null);
+    setStartSuggestions([]);
+    setRouteCoords([]);
+    setErrorMsg("");
+  };
+  const clearEnd = () => {
+    setEndLocation("");
+    setEndCoords(null);
+    setEndSuggestions([]);
+    setRouteCoords([]);
+    setErrorMsg("");
   };
 
   return (
@@ -149,15 +217,20 @@ const Rides = () => {
           handleRequestRide();
         }}
         noValidate
+        autoComplete="off"
       >
-        <div className="input-wrapper">
+        <div className="input-wrapper" style={{ position: "relative" }}>
           <LocationIcon color="#2563eb" />
           <input
             id="startLocation"
             type="text"
             placeholder="Start Location"
             value={startLocation}
-            onChange={(e) => setStartLocation(e.target.value)}
+            onChange={(e) => {
+              setStartLocation(e.target.value);
+              setStartCoords(null);
+              debouncedFetchStartSuggestions(e.target.value);
+            }}
             aria-label="Start Location"
             required
           />
@@ -172,16 +245,49 @@ const Rides = () => {
             </button>
           )}
           <label htmlFor="startLocation">Start Location</label>
+
+          {startSuggestions.length > 0 && (
+            <ul className="suggestions-list">
+              {startSuggestions.map((place) => (
+                <li
+                  key={place.properties.place_id}
+                  onClick={() => {
+                    setStartLocation(place.properties.formatted);
+                    setStartCoords([place.properties.lat, place.properties.lon]);
+                    setStartSuggestions([]);
+                    setRouteCoords([]);
+                    setErrorMsg("");
+                  }}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setStartLocation(place.properties.formatted);
+                      setStartCoords([place.properties.lat, place.properties.lon]);
+                      setStartSuggestions([]);
+                      setRouteCoords([]);
+                      setErrorMsg("");
+                    }
+                  }}
+                >
+                  {place.properties.formatted}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
-        <div className="input-wrapper">
+        <div className="input-wrapper" style={{ position: "relative" }}>
           <LocationIcon color="#ef4444" />
           <input
             id="endLocation"
             type="text"
             placeholder="End Location"
             value={endLocation}
-            onChange={(e) => setEndLocation(e.target.value)}
+            onChange={(e) => {
+              setEndLocation(e.target.value);
+              setEndCoords(null);
+              debouncedFetchEndSuggestions(e.target.value);
+            }}
             aria-label="End Location"
             required
           />
@@ -196,6 +302,35 @@ const Rides = () => {
             </button>
           )}
           <label htmlFor="endLocation">End Location</label>
+
+          {endSuggestions.length > 0 && (
+            <ul className="suggestions-list">
+              {endSuggestions.map((place) => (
+                <li
+                  key={place.properties.place_id}
+                  onClick={() => {
+                    setEndLocation(place.properties.formatted);
+                    setEndCoords([place.properties.lat, place.properties.lon]);
+                    setEndSuggestions([]);
+                    setRouteCoords([]);
+                    setErrorMsg("");
+                  }}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setEndLocation(place.properties.formatted);
+                      setEndCoords([place.properties.lat, place.properties.lon]);
+                      setEndSuggestions([]);
+                      setRouteCoords([]);
+                      setErrorMsg("");
+                    }
+                  }}
+                >
+                  {place.properties.formatted}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {errorMsg && (
@@ -220,6 +355,27 @@ const Rides = () => {
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> contributors'
           />
+          {/* Suggestion markers with low opacity */}
+          {startSuggestions.map((place) => (
+            <Marker
+              key={"start-" + place.properties.place_id}
+              position={[place.properties.lat, place.properties.lon]}
+              opacity={0.5}
+            >
+              <Popup>{place.properties.formatted}</Popup>
+            </Marker>
+          ))}
+          {endSuggestions.map((place) => (
+            <Marker
+              key={"end-" + place.properties.place_id}
+              position={[place.properties.lat, place.properties.lon]}
+              opacity={0.5}
+            >
+              <Popup>{place.properties.formatted}</Popup>
+            </Marker>
+          ))}
+
+          {/* Selected start and end markers */}
           {startCoords && (
             <Marker position={startCoords}>
               <Popup>Start Location: {startLocation}</Popup>
@@ -230,21 +386,28 @@ const Rides = () => {
               <Popup>End Location: {endLocation}</Popup>
             </Marker>
           )}
+
+          {/* Route polyline */}
           {routeCoords.length > 0 && <Polyline positions={routeCoords} color="#2563eb" weight={5} />}
+
+          {/* Nearby posted rides markers */}
+          {nearbyRides.map((ride) => (
+            <Marker
+              key={ride.id}
+              position={[ride.startCoords.lat, ride.startCoords.lon]}
+            >
+              <Popup>
+                <div>
+                  <strong>Driver:</strong> {ride.driverName} <br />
+                  <strong>Car:</strong> {ride.carModel} <br />
+                  <strong>Price:</strong> ${ride.price} <br />
+                  <strong>Seats:</strong> {ride.seats}
+                </div>
+              </Popup>
+            </Marker>
+          ))}
         </MapContainer>
       </div>
-
-      {rideRequested && rideInfo && (
-        <div className="ride-confirmation" role="alert" aria-live="polite">
-          <h3>Ride Confirmed</h3>
-          <p><strong>Start Location:</strong> {rideInfo.startLocation}</p>
-          <p><strong>End Location:</strong> {rideInfo.endLocation}</p>
-          <p><strong>Driver:</strong> {rideInfo.driver}</p>
-          <p><strong>Fare:</strong> {rideInfo.fare}</p>
-          <p><strong>ETA:</strong> {rideInfo.estimatedTime}</p>
-          <p><strong>Date:</strong> {rideInfo.date}</p>
-        </div>
-      )}
     </div>
   );
 };

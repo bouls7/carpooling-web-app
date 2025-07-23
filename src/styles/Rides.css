@@ -175,6 +175,44 @@
   vertical-align: middle;
 }
 
+/* Suggestions dropdown */
+.suggestions-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 2px solid #cbd5e1;
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+  user-select: none;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #1f2937;
+  margin-top: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.suggestions-list li {
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background-color 0.25s ease;
+  outline: none;
+}
+
+.suggestions-list li:hover,
+.suggestions-list li:focus {
+  background-color: #2563eb;
+  color: #fff;
+  outline: none;
+}
+
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

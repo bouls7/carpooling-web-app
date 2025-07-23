@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import Tesseract from "tesseract.js";
 import "../styles/SignUp.css";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -16,6 +17,8 @@ export default function SignUp() {
     idScan: null,
   });
 
+  const [ocrText, setOcrText] = useState("");
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,13 +26,6 @@ export default function SignUp() {
 
   const navigate = useNavigate();
   const { accounts, activeAccount, addAccount, switchAccount } = useAuth();
-
-  // Redirect if already logged in
-  useEffect(() => {
-    if (activeAccount) {
-      navigate("/");
-    }
-  }, [activeAccount, navigate]);
 
   const showPopup = (message, callback = null) => {
     setPopupMessage(message);
@@ -45,7 +41,26 @@ export default function SignUp() {
   };
 
   const handleFileChange = (e) => {
-    setFormData((prev) => ({ ...prev, idScan: e.target.files[0] }));
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setFormData((prev) => ({ ...prev, idScan: file }));
+    setIsOcrProcessing(true);
+    setOcrText("");
+
+    Tesseract.recognize(file, "eng", {})
+      .then(({ data: { text } }) => {
+        setOcrText(text);
+        setIsOcrProcessing(false);
+
+        if (!text.toLowerCase().includes(formData.licenseNumber.toLowerCase())) {
+          alert("Warning: License number not detected in the uploaded ID scan.");
+        }
+      })
+      .catch(() => {
+        setIsOcrProcessing(false);
+        alert("Failed to process ID scan. Try uploading a clearer image.");
+      });
   };
 
   const handleSubmit = async (e) => {
@@ -65,7 +80,6 @@ export default function SignUp() {
 
         localStorage.setItem("token", token);
 
-        // Find existing account by email
         const existingAccount = accounts.find(
           (acc) => acc.email === formData.email
         );
@@ -75,6 +89,7 @@ export default function SignUp() {
         } else {
           const newId = addAccount({
             email: formData.email,
+            fullName: formData.fullName || "",
             token,
             role: "passenger",
           });
@@ -92,7 +107,6 @@ export default function SignUp() {
       return;
     }
 
-    // Signup validation
     if (!/^[a-zA-Z\s]+$/.test(formData.fullName)) {
       showPopup("Full Name must contain only letters and spaces.");
       return;
@@ -112,17 +126,28 @@ export default function SignUp() {
         showPopup("Please upload a scan of your ID.");
         return;
       }
+      if (isOcrProcessing) {
+        showPopup("Please wait for OCR to finish processing.");
+        return;
+      }
+      if (
+        ocrText &&
+        !ocrText.toLowerCase().includes(formData.licenseNumber.toLowerCase())
+      ) {
+        const proceed = window.confirm(
+          "License number not found in ID scan. Do you want to proceed anyway?"
+        );
+        if (!proceed) return;
+      }
     }
 
     try {
-      // Signup user
       await signupUser({
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
       });
 
-      // Auto login after signup
       const token = await loginUser({
         email: formData.email,
         password: formData.password,
@@ -132,6 +157,7 @@ export default function SignUp() {
 
       const newId = addAccount({
         email: formData.email,
+        fullName: formData.fullName,
         token,
         role: formData.role,
       });
@@ -216,9 +242,7 @@ export default function SignUp() {
 
             <div className="role-selection">
               <div
-                className={`role-option ${
-                  formData.role === "passenger" ? "selected" : ""
-                }`}
+                className={`role-option ${formData.role === "passenger" ? "selected" : ""}`}
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, role: "passenger" }))
                 }
@@ -227,9 +251,7 @@ export default function SignUp() {
                 <div className="label">Passenger</div>
               </div>
               <div
-                className={`role-option ${
-                  formData.role === "driver" ? "selected" : ""
-                }`}
+                className={`role-option ${formData.role === "driver" ? "selected" : ""}`}
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, role: "driver" }))
                 }

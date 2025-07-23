@@ -20,19 +20,16 @@ export default function AccountInfo() {
 
   const handleLogout = () => {
     if (activeAccount && activeAccount.id === account.id) {
-      // Logout active account
       logoutActive();
     } else {
-      // Switch then logout
       switchAccount(account.id);
       logoutActive();
     }
-    // After logout, check accounts count and redirect accordingly
     setTimeout(() => {
       if (accounts.length > 1) {
-        navigate("/accounts"); // more accounts remain, choose one
+        navigate("/accounts");
       } else {
-        navigate("/signup"); // no accounts left, go sign up
+        navigate("/signup");
       }
     }, 100);
   };
@@ -41,7 +38,7 @@ export default function AccountInfo() {
     <main className="account-info-container">
       <h1>Account Information</h1>
       <div className="account-detail">
-        <strong>Full Name:</strong> {account.username}
+        <strong>Full Name:</strong> {account.fullName || "N/A"}
       </div>
       <div className="account-detail">
         <strong>Email:</strong> {account.email}
