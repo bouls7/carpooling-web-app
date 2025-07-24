@@ -1,10 +1,9 @@
 import React, { useState } from "react";
-import Tesseract from "tesseract.js";
-import "../styles/SignUp.css";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { signupUser, loginUser } from "../api/authService";
+import "../styles/SignUp.css";
 
 export default function SignUp() {
   const [formData, setFormData] = useState({
@@ -14,18 +13,18 @@ export default function SignUp() {
     confirmPassword: "",
     role: "passenger",
     licenseNumber: "",
-    idScan: null,
+    carPlate: "",
+    carModel: "",
+    seats: 4,
   });
 
-  const [ocrText, setOcrText] = useState("");
-  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const navigate = useNavigate();
-  const { accounts, activeAccount, addAccount, switchAccount } = useAuth();
+  const { accounts, addAccount, switchAccount } = useAuth();
 
   const showPopup = (message, callback = null) => {
     setPopupMessage(message);
@@ -40,44 +39,47 @@ export default function SignUp() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setFormData((prev) => ({ ...prev, idScan: file }));
-    setIsOcrProcessing(true);
-    setOcrText("");
-
-    Tesseract.recognize(file, "eng", {})
-      .then(({ data: { text } }) => {
-        setOcrText(text);
-        setIsOcrProcessing(false);
-
-        if (!text.toLowerCase().includes(formData.licenseNumber.toLowerCase())) {
-          alert("Warning: License number not detected in the uploaded ID scan.");
-        }
-      })
-      .catch(() => {
-        setIsOcrProcessing(false);
-        alert("Failed to process ID scan. Try uploading a clearer image.");
-      });
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (formData.password.length < 8) {
-      showPopup("Password must be at least 8 characters long.");
-      return;
+    if (!isLoginMode) {
+      if (formData.password.length < 8) {
+        showPopup("Password must be at least 8 characters long.");
+        return;
+      }
+
+      if (!/^[a-zA-Z\s]+$/.test(formData.fullName)) {
+        showPopup("Full Name must contain only letters and spaces.");
+        return;
+      }
+
+      if (formData.password !== formData.confirmPassword) {
+        showPopup("Passwords do not match.");
+        return;
+      }
+
+      if (formData.role === "driver") {
+        if (!formData.licenseNumber.trim()) {
+          showPopup("Please enter your license number.");
+          return;
+        }
+        if (!formData.carPlate.trim()) {
+          showPopup("Please enter your car plate number.");
+          return;
+        }
+        if (!formData.carModel.trim()) {
+          showPopup("Please enter your car model.");
+          return;
+        }
+      }
     }
 
-    if (isLoginMode) {
-      try {
+    try {
+      if (isLoginMode) {
         const token = await loginUser({
           email: formData.email,
           password: formData.password,
         });
-
         localStorage.setItem("token", token);
 
         const existingAccount = accounts.find(
@@ -97,56 +99,30 @@ export default function SignUp() {
         }
 
         showPopup("Login successful! Redirecting...", () => navigate("/"));
-      } catch (err) {
-        showPopup(
-          err?.response?.data?.message ||
-            err.message ||
-            "Login failed. Please check credentials."
-        );
-      }
-      return;
-    }
-
-    if (!/^[a-zA-Z\s]+$/.test(formData.fullName)) {
-      showPopup("Full Name must contain only letters and spaces.");
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      showPopup("Passwords do not match.");
-      return;
-    }
-
-    if (formData.role === "driver") {
-      if (!formData.licenseNumber.trim()) {
-        showPopup("Please enter your license number.");
         return;
       }
-      if (!formData.idScan) {
-        showPopup("Please upload a scan of your ID.");
-        return;
-      }
-      if (isOcrProcessing) {
-        showPopup("Please wait for OCR to finish processing.");
-        return;
-      }
-      if (
-        ocrText &&
-        !ocrText.toLowerCase().includes(formData.licenseNumber.toLowerCase())
-      ) {
-        const proceed = window.confirm(
-          "License number not found in ID scan. Do you want to proceed anyway?"
-        );
-        if (!proceed) return;
-      }
-    }
 
-    try {
-      await signupUser({
-        fullName: formData.fullName,
-        email: formData.email,
-        password: formData.password,
-      });
+      if (formData.role === "driver") {
+        // Driver signup as JSON (no file upload)
+        await signupUser({
+          name: formData.fullName,
+          email: formData.email,
+          password: formData.password,
+          licenseNumber: formData.licenseNumber,
+          carPlate: formData.carPlate,
+          carModel: formData.carModel,
+          seats: formData.seats,
+          role: "driver",
+        });
+      } else {
+        // Passenger signup
+        await signupUser({
+          fullName: formData.fullName,
+          email: formData.email,
+          password: formData.password,
+          role: "passenger",
+        });
+      }
 
       const token = await loginUser({
         email: formData.email,
@@ -165,9 +141,7 @@ export default function SignUp() {
 
       showPopup("Signup successful! Redirecting...", () => navigate("/"));
     } catch (err) {
-      showPopup(
-        err?.response?.data?.message || err.message || "Signup failed."
-      );
+      showPopup(err?.response?.data?.message || err.message || "Signup failed.");
     }
   };
 
@@ -175,11 +149,7 @@ export default function SignUp() {
     <div className="signup-container">
       <h2>{isLoginMode ? "Log In to Your Account" : "Create an Account"}</h2>
 
-      <form
-        onSubmit={handleSubmit}
-        className="signup-form"
-        encType="multipart/form-data"
-      >
+      <form onSubmit={handleSubmit} className="signup-form">
         {!isLoginMode && (
           <input
             type="text"
@@ -212,8 +182,6 @@ export default function SignUp() {
           <span
             className="eye-icon"
             onClick={() => setShowPassword((prev) => !prev)}
-            role="button"
-            tabIndex={0}
           >
             {showPassword ? <FaEyeSlash /> : <FaEye />}
           </span>
@@ -233,8 +201,6 @@ export default function SignUp() {
               <span
                 className="eye-icon"
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
-                role="button"
-                tabIndex={0}
               >
                 {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
               </span>
@@ -242,7 +208,9 @@ export default function SignUp() {
 
             <div className="role-selection">
               <div
-                className={`role-option ${formData.role === "passenger" ? "selected" : ""}`}
+                className={`role-option ${
+                  formData.role === "passenger" ? "selected" : ""
+                }`}
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, role: "passenger" }))
                 }
@@ -251,7 +219,9 @@ export default function SignUp() {
                 <div className="label">Passenger</div>
               </div>
               <div
-                className={`role-option ${formData.role === "driver" ? "selected" : ""}`}
+                className={`role-option ${
+                  formData.role === "driver" ? "selected" : ""
+                }`}
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, role: "driver" }))
                 }
@@ -271,17 +241,22 @@ export default function SignUp() {
                   onChange={handleChange}
                   required
                 />
-
-                <label className="file-label">
-                  Upload ID Scan
-                  <input
-                    type="file"
-                    name="idScan"
-                    accept="image/*,application/pdf"
-                    onChange={handleFileChange}
-                    required
-                  />
-                </label>
+                <input
+                  type="text"
+                  name="carPlate"
+                  placeholder="Car Plate Number"
+                  value={formData.carPlate}
+                  onChange={handleChange}
+                  required
+                />
+                <input
+                  type="text"
+                  name="carModel"
+                  placeholder="Car Model"
+                  value={formData.carModel}
+                  onChange={handleChange}
+                  required
+                />
               </>
             )}
           </>
@@ -292,7 +267,7 @@ export default function SignUp() {
         </button>
       </form>
 
-      <p style={{ marginTop: "12px" }}>
+      <p>
         {isLoginMode ? "Don't have an account?" : "Already have an account?"}{" "}
         <span
           onClick={() => setIsLoginMode((prev) => !prev)}

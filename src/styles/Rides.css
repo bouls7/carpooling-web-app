@@ -1,81 +1,117 @@
-/* Container */
+:root {
+  --primary-color: #2563eb;
+  --primary-hover: #1e40af;
+  --input-bg: #f5f7fa;
+  --input-shadow-light: rgba(255, 255, 255, 0.7);
+  --input-shadow-dark: rgba(0, 0, 0, 0.1);
+  --border-radius: 14px;
+  --transition-speed: 0.3s;
+  --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --text-color: #1f2937;
+  --placeholder-color: #a1a1aa;
+  --error-color: #dc2626;
+  --box-shadow-focus: 0 0 0 3px rgba(37, 99, 235, 0.5);
+}
+
 .rides-page-container {
   max-width: 720px;
   margin: 3rem auto;
   padding: 2rem 2rem 3rem;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: #222;
+  font-family: var(--font-family);
+  color: var(--text-color);
   background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 16px 32px rgba(0,0,0,0.12);
+  border-radius: 20px;
+  box-shadow:
+    6px 6px 15px var(--input-shadow-dark),
+    -6px -6px 15px var(--input-shadow-light);
+  border: 1.5px solid #d1d5db;
   user-select: none;
-  border: 1px solid #e0e7ff;
 }
 
-/* Title */
 .rides-title {
   text-align: center;
-  font-weight: 900;
-  margin-bottom: 2.5rem;
+  font-weight: 800;
   font-size: 2.8rem;
-  color: #2563eb;
-  letter-spacing: 1.4px;
+  color: var(--primary-color);
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  text-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  margin-bottom: 3rem;
+  text-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+  user-select: text;
 }
 
-/* Form */
 .rides-form {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 2.5rem;
   align-items: center;
 }
 
-/* Input wrapper */
+/* Input Wrapper: Neumorphic container for input */
 .input-wrapper {
   position: relative;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   margin: 0 auto;
+  border-radius: var(--border-radius);
+  background: var(--input-bg);
+  box-shadow:
+    inset 6px 6px 10px var(--input-shadow-dark),
+    inset -6px -6px 10px var(--input-shadow-light);
+  padding: 12px 0;
+  transition: box-shadow var(--transition-speed);
 }
 
-/* Input */
-.input-wrapper input {
-  width: 80%;
-  padding: 16px 36px 16px 44px;
-  border: 2px solid #cbd5e1;
-  border-radius: 14px;
-  font-size: 1.15rem;
-  color: #1f2937;
-  font-weight: 600;
-  background: #fefefe;
-  box-shadow: inset 0 4px 6px rgba(203, 213, 225, 0.4);
-  outline: none;
-  user-select: text;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+.input-wrapper:focus-within {
+  box-shadow:
+    inset 6px 6px 10px var(--input-shadow-dark),
+    inset -6px -6px 10px var(--input-shadow-light),
+    0 0 8px 3px rgba(37, 99, 235, 0.4);
 }
+
+/* Input Field */
+.input-wrapper input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  padding: 18px 44px 18px 48px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-color);
+  background: transparent;
+  border-radius: var(--border-radius);
+  user-select: text;
+  transition: color var(--transition-speed);
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0; /* for flexbox shrinking */
+}
+
+
 
 .input-wrapper input::placeholder {
-  color: #a1a1aa;
+  color: var(--placeholder-color);
   font-weight: 500;
   font-size: 1.15rem;
+  opacity: 1;
+  transition: opacity var(--transition-speed);
 }
 
-/* Hide label on focus */
-.input-wrapper input:focus + label {
+/* When input has value, hide placeholder (for smooth label float) */
+.input-wrapper input:not(:placeholder-shown)::placeholder {
   opacity: 0;
-  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.3s ease;
 }
 
-/* Label style */
+/* Floating label */
 .input-wrapper label {
   position: absolute;
-  left: 44px;
+  left: 48px;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translateY(-50%) scale(1);
   font-size: 1.15rem;
   font-weight: 600;
   color: #6b7280;
@@ -83,26 +119,49 @@
   background: #fff;
   padding: 0 6px;
   user-select: none;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
+  transition:
+    top var(--transition-speed),
+    color var(--transition-speed),
+    transform var(--transition-speed),
+    font-size var(--transition-speed);
+  z-index: 10;
+  transform-origin: left center;
 }
 
-/* Left icon */
+/* Float label on focus or when input has value */
+.input-wrapper input:focus + label,
+.input-wrapper input:not(:placeholder-shown) + label {
+  top: 6px;
+  font-size: 0.85rem;
+  color: var(--primary-color);
+  transform: translateY(0) scale(0.85);
+}
+
+/* Input icons */
 .input-icon {
   position: absolute;
   top: 50%;
-  left: 14px;
-  transform: translateY(-50%);
+  left: 16px;
   width: 22px;
   height: 22px;
-  user-select: none;
+  fill: #9ca3af;
+  opacity: 0.75;
   pointer-events: none;
+  transform: translateY(-50%);
+  user-select: none;
+  transition: fill var(--transition-speed);
+}
+
+.input-wrapper input:focus ~ .input-icon {
+  fill: var(--primary-color);
+  opacity: 1;
 }
 
 /* Clear button */
 .clear-btn {
   position: absolute;
   top: 50%;
-  right: 12px;
+  right: 14px;
   transform: translateY(-50%);
   background: transparent;
   border: none;
@@ -112,43 +171,62 @@
   user-select: none;
   padding: 0;
   line-height: 1;
-  transition: color 0.2s ease;
+  transition: color var(--transition-speed);
 }
 
-.clear-btn:hover {
-  color: #2563eb;
+.clear-btn:hover,
+.clear-btn:focus {
+  color: var(--primary-color);
+  outline: none;
 }
 
 /* Error message */
 .error-message {
-  color: #dc2626;
-  font-weight: 600;
-  font-size: 0.95rem;
+  color: var(--error-color);
+  font-weight: 700;
+  font-size: 1rem;
   margin-top: -1rem;
   margin-bottom: 1rem;
   text-align: center;
   user-select: text;
+  letter-spacing: 0.3px;
 }
 
-/* Button */
+/* Submit button with layered gradient and subtle animation */
 .rides-btn {
-  width: 400px;
-  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  width: 100%;
+  max-width: 420px;
+  background:
+    linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
   color: #fff;
   padding: 16px 0;
   border: none;
-  border-radius: 18px;
-  font-weight: 900;
+  border-radius: 20px;
+  font-weight: 800;
   font-size: 1.4rem;
-  letter-spacing: 1.1px;
+  letter-spacing: 1.3px;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.7);
-  transition: background 0.35s ease, box-shadow 0.35s ease;
+  box-shadow:
+    0 6px 20px rgba(37, 99, 235, 0.6),
+    0 0 8px rgba(37, 99, 235, 0.4) inset;
+  transition: background 0.4s ease, box-shadow 0.4s ease;
   user-select: none;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 0.75rem;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.rides-btn:hover:not(:disabled),
+.rides-btn:focus:not(:disabled) {
+  background:
+    linear-gradient(135deg, var(--primary-hover) 0%, var(--primary-color) 100%);
+  box-shadow:
+    0 8px 24px rgba(37, 99, 235, 0.8),
+    0 0 12px rgba(37, 99, 235, 0.5) inset;
+  outline: none;
 }
 
 .rides-btn:disabled {
@@ -157,16 +235,11 @@
   box-shadow: none;
 }
 
-.rides-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
-  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.85);
-}
-
-/* Spinner animation for loading button */
+/* Loading spinner */
 .rides-btn[aria-busy="true"]::after {
   content: "";
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border: 3px solid #fff;
   border-top-color: transparent;
   border-radius: 50%;
@@ -184,137 +257,108 @@
   max-height: 220px;
   overflow-y: auto;
   background: #fff;
-  border: 2px solid #cbd5e1;
+  border: 1.5px solid #cbd5e1;
   border-top: none;
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  z-index: 10;
+  z-index: 20;
   user-select: none;
   font-weight: 600;
   font-size: 1.1rem;
-  color: #1f2937;
-  margin-top: 0;
+  color: var(--text-color);
+  margin: 0;
   padding-left: 0;
   list-style: none;
+  opacity: 0;
+  transform-origin: top;
+  transform: translateY(-10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.input-wrapper:hover .suggestions-list,
+.input-wrapper:focus-within .suggestions-list,
+.suggestions-list:hover,
+.suggestions-list:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 .suggestions-list li {
-  padding: 10px 16px;
+  padding: 12px 18px;
   cursor: pointer;
-  transition: background-color 0.25s ease;
+  transition: background-color 0.3s ease, color 0.3s ease;
   outline: none;
 }
 
 .suggestions-list li:hover,
 .suggestions-list li:focus {
-  background-color: #2563eb;
+  background-color: var(--primary-color);
   color: #fff;
   outline: none;
 }
 
-
+/* Spinner animation */
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-/* Map container */
+/* Map container styling */
 .map-wrapper {
   margin-top: 3rem;
-  border-radius: 18px;
-  overflow: hidden;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
-  border: 2px solid #2563eb;
-}
-
-/* Ride confirmation */
-.ride-confirmation {
-  margin-top: 3.5rem;
-  background-color: #dcfce7;
-  padding: 1.8rem 2.5rem;
   border-radius: 20px;
-  border: 2.5px solid #22c55e;
-  color: #166534;
-  text-align: center;
-  font-weight: 700;
-  font-size: 1.25rem;
-  letter-spacing: 0.7px;
-  box-shadow: 0 6px 18px rgba(22, 101, 52, 0.4);
-  user-select: text;
+  overflow: hidden;
+  box-shadow:
+    8px 8px 25px rgba(0, 0, 0, 0.12),
+    -8px -8px 25px rgba(255, 255, 255, 0.7);
+  border: 2px solid var(--primary-color);
 }
 
-/* Responsive tweaks */
+/* Responsive adjustments */
 @media (max-width: 768px) {
   .rides-page-container {
-    padding: 1.5rem;
+    padding: 1.5rem 1.5rem 2rem;
   }
-
   .rides-title {
-    font-size: 2rem;
+    font-size: 2.2rem;
   }
-
-  .rides-btn {
-    font-size: 1.2rem;
-    padding: 14px 0;
-    width: 100%;
-    max-width: 400px;
-  }
-
-  .ride-confirmation {
-    padding: 1.5rem 1.8
-    rem;
-    font-size: 1.1rem;
+  .rides-btn,
+  .input-wrapper {
+    max-width: 100%;
   }
 }
 
 @media (max-width: 480px) {
   .rides-page-container {
     margin: 1.5rem auto;
-    border-radius: 12px;
-    padding: 1rem;
+    border-radius: 16px;
+    padding: 1rem 1rem 1.5rem;
   }
-
   .rides-title {
-    font-size: 1.7rem;
+    font-size: 1.8rem;
   }
-
-  .rides-form {
-    gap: 1.5rem;
-  }
-
   .input-wrapper input {
     font-size: 1rem;
-    padding: 14px 36px 14px 40px;
+    padding: 14px 40px 14px 44px;
+    
   }
-
   .input-wrapper label {
     font-size: 1rem;
-    left: 40px;
+    left: 44px;
   }
-
   .input-icon {
     width: 18px;
     height: 18px;
-    left: 12px;
+    left: 14px;
   }
-
   .clear-btn {
     font-size: 18px;
-    right: 10px;
+    right: 12px;
   }
-
   .rides-btn {
-    font-size: 1.1rem;
-    width: 100%;
-    max-width: 400px;
-  }
-
-  .map-wrapper {
-    margin-top: 2rem;
-  }
-
-  .ride-confirmation {
-    font-size: 1rem;
+    font-size: 1.2rem;
   }
 }

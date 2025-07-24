@@ -29,7 +29,7 @@ function debounce(func, delay) {
 }
 
 const Rides = () => {
-  const apiKey = "b20fbcf917ef4227ba363e7b7db7515b"; 
+  const apiKey = "b20fbcf917ef4227ba363e7b7db7515b";
 
   const [center, setCenter] = useState(defaultCenter);
 
@@ -63,42 +63,38 @@ const Rides = () => {
     );
   }, []);
 
-  // Fetch autocomplete suggestions
-const fetchSuggestions = async (query, setSuggestions) => {
-  if (!query) {
-    setSuggestions([]);
-    return;
-  }
+  const fetchSuggestions = async (query, setSuggestions) => {
+    if (!query) {
+      setSuggestions([]);
+      return;
+    }
 
-  const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-    query
-  )}&limit=5&apiKey=${apiKey}`;
+    const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
+      query
+    )}&limit=5&apiKey=${apiKey}`;
 
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    // FIX: Geoapify uses `results`, not `features`
-    const filteredResults = (data.results || []).filter(
-      (place) => place && place.properties && place.properties.formatted
-    );
-    setSuggestions(filteredResults);
-  } catch (err) {
-    console.error("Autocomplete fetch error:", err);
-    setSuggestions([]);
-  }
-};
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      const filteredResults = (data.results || []).filter(
+        (place) => place && place.properties && place.properties.formatted
+      );
+      setSuggestions(filteredResults);
+    } catch (err) {
+      console.error("Autocomplete fetch error:", err);
+      setSuggestions([]);
+    }
+  };
 
-
-  const debouncedFetchStartSuggestions = debounce(
-    (val) => fetchSuggestions(val, setStartSuggestions),
-    300
+  const debouncedFetchStartSuggestions = React.useCallback(
+    debounce((val) => fetchSuggestions(val, setStartSuggestions), 300),
+    []
   );
-  const debouncedFetchEndSuggestions = debounce(
-    (val) => fetchSuggestions(val, setEndSuggestions),
-    300
+  const debouncedFetchEndSuggestions = React.useCallback(
+    debounce((val) => fetchSuggestions(val, setEndSuggestions), 300),
+    []
   );
 
-  // Geocode address to coords
   const geocodeAddress = async (address) => {
     const response = await fetch(
       `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(
@@ -114,15 +110,13 @@ const fetchSuggestions = async (query, setSuggestions) => {
     }
   };
 
-  // Fetch nearby rides from backend (mocked here)
   useEffect(() => {
     if (!startCoords) return;
 
     async function fetchNearbyRides() {
       try {
-        // Replace with your backend API endpoint:
         const res = await fetch(
-          `/api/rides?nearLat=${startCoords[0]}&nearLon=${startCoords[1]}`
+          `https://localhost:7221/api/rides?nearLat=${startCoords[0]}&nearLon=${startCoords[1]}`
         );
         const data = await res.json();
         setNearbyRides(data);
@@ -135,7 +129,6 @@ const fetchSuggestions = async (query, setSuggestions) => {
     fetchNearbyRides();
   }, [startCoords]);
 
-  // Handle ride request button
   const handleRequestRide = async () => {
     setErrorMsg("");
     setLoading(true);
@@ -159,7 +152,6 @@ const fetchSuggestions = async (query, setSuggestions) => {
         setEndCoords(end);
       }
 
-      // Geoapify routing API (CORS friendly)
       const url = `https://api.geoapify.com/v1/routing?waypoints=${start[0]},${start[1]}|${end[0]},${end[1]}&mode=drive&apiKey=${apiKey}`;
       const res = await fetch(url);
       const data = await res.json();
@@ -173,12 +165,11 @@ const fetchSuggestions = async (query, setSuggestions) => {
       const coords = data.features[0].geometry.coordinates.map((c) => [c[1], c[0]]);
       setRouteCoords(coords);
 
-      // Add ride history (optional)
       addRideHistory({
         id: Date.now(),
         startLocation,
         endLocation,
-        fare: `$${(data.features[0].properties.distance / 1000 * 0.5).toFixed(2)}`,
+        fare: `$${((data.features[0].properties.distance / 1000) * 0.5).toFixed(2)}`,
         driver: "John Smith",
         estimatedTime: "~5 mins",
         date: new Date().toLocaleString(),
@@ -219,12 +210,12 @@ const fetchSuggestions = async (query, setSuggestions) => {
         noValidate
         autoComplete="off"
       >
-        <div className="input-wrapper" style={{ position: "relative" }}>
+        <div className="input-wrapper">
           <LocationIcon color="#2563eb" />
           <input
             id="startLocation"
             type="text"
-            placeholder="Start Location"
+            placeholder=" "
             value={startLocation}
             onChange={(e) => {
               setStartLocation(e.target.value);
@@ -234,6 +225,7 @@ const fetchSuggestions = async (query, setSuggestions) => {
             aria-label="Start Location"
             required
           />
+          <label htmlFor="startLocation">Start Location</label>
           {startLocation && (
             <button
               type="button"
@@ -244,8 +236,6 @@ const fetchSuggestions = async (query, setSuggestions) => {
               &times;
             </button>
           )}
-          <label htmlFor="startLocation">Start Location</label>
-
           {startSuggestions.length > 0 && (
             <ul className="suggestions-list">
               {startSuggestions.map((place) => (
@@ -276,12 +266,12 @@ const fetchSuggestions = async (query, setSuggestions) => {
           )}
         </div>
 
-        <div className="input-wrapper" style={{ position: "relative" }}>
+        <div className="input-wrapper">
           <LocationIcon color="#ef4444" />
           <input
             id="endLocation"
             type="text"
-            placeholder="End Location"
+            placeholder=" "
             value={endLocation}
             onChange={(e) => {
               setEndLocation(e.target.value);
@@ -291,6 +281,7 @@ const fetchSuggestions = async (query, setSuggestions) => {
             aria-label="End Location"
             required
           />
+          <label htmlFor="endLocation">End Location</label>
           {endLocation && (
             <button
               type="button"
@@ -301,8 +292,6 @@ const fetchSuggestions = async (query, setSuggestions) => {
               &times;
             </button>
           )}
-          <label htmlFor="endLocation">End Location</label>
-
           {endSuggestions.length > 0 && (
             <ul className="suggestions-list">
               {endSuggestions.map((place) => (
@@ -355,7 +344,7 @@ const fetchSuggestions = async (query, setSuggestions) => {
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> contributors'
           />
-          {/* Suggestion markers with low opacity */}
+
           {startSuggestions.map((place) => (
             <Marker
               key={"start-" + place.properties.place_id}
@@ -375,7 +364,6 @@ const fetchSuggestions = async (query, setSuggestions) => {
             </Marker>
           ))}
 
-          {/* Selected start and end markers */}
           {startCoords && (
             <Marker position={startCoords}>
               <Popup>Start Location: {startLocation}</Popup>
@@ -387,25 +375,22 @@ const fetchSuggestions = async (query, setSuggestions) => {
             </Marker>
           )}
 
-          {/* Route polyline */}
           {routeCoords.length > 0 && <Polyline positions={routeCoords} color="#2563eb" weight={5} />}
 
-          {/* Nearby posted rides markers */}
-          {nearbyRides.map((ride) => (
-            <Marker
-              key={ride.id}
-              position={[ride.startCoords.lat, ride.startCoords.lon]}
-            >
-              <Popup>
-                <div>
-                  <strong>Driver:</strong> {ride.driverName} <br />
-                  <strong>Car:</strong> {ride.carModel} <br />
-                  <strong>Price:</strong> ${ride.price} <br />
-                  <strong>Seats:</strong> {ride.seats}
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          {nearbyRides.map((ride) =>
+            ride.StartLat && ride.StartLon ? (
+              <Marker key={ride.id} position={[ride.StartLat, ride.StartLon]}>
+                <Popup>
+                  <div>
+                    <strong>Driver:</strong> {ride.driverName} <br />
+                    <strong>Car:</strong> {ride.carModel} <br />
+                    <strong>Price:</strong> ${ride.price} <br />
+                    <strong>Seats:</strong> {ride.seats}
+                  </div>
+                </Popup>
+              </Marker>
+            ) : null
+          )}
         </MapContainer>
       </div>
     </div>

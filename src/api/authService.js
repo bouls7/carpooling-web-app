@@ -1,53 +1,29 @@
 export const signupUser = async (userData) => {
-  const response = await fetch("https://localhost:7221/api/auth/signup", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      name: userData.fullName, 
-      email: userData.email,
-      password: userData.password,
-    }),
+  const response = await fetch('https://localhost:7221/api/auth/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(userData)
   });
 
   if (!response.ok) {
-    let errorMessage = "Signup failed";
-    try {
-      const error = await response.json();
-      errorMessage = error.message || errorMessage;
-    } catch {
-      errorMessage = await response.text();
-    }
-    throw new Error(errorMessage);
+    const error = await response.json();
+    throw new Error(error.message || 'Signup failed');
   }
 
   return await response.json();
 };
 
-export const loginUser = async (userData) => {
-  const response = await fetch("https://localhost:7221/api/Auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: userData.email,
-      password: userData.password,
-    }),
+export const loginUser = async (credentials) => {
+  const response = await fetch('https://localhost:7221/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(credentials)
   });
 
   if (!response.ok) {
-    let errorMessage = "Login failed";
-    const resClone = response.clone(); // clone the response to read text later if needed
-    try {
-      const error = await response.json();
-      errorMessage = error.message || errorMessage;
-    } catch {
-      errorMessage = await resClone.text();
-    }
-    throw new Error(errorMessage);
+    const error = await response.json();
+    throw new Error(error.message || 'Login failed');
   }
 
-  const data = await response.json();
-  return data.token;
+  return await response.json();
 };
-
