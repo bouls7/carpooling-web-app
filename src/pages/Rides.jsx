@@ -1,24 +1,12 @@
 import React, { useState, useEffect } from "react";
 import "../styles/Rides.css";
-import { MapContainer, TileLayer, Marker, Polyline, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import "../fix-leaflet-icon";
 
 const defaultCenter = [33.8938, 35.5018]; // Beirut
-
-const LocationIcon = ({ color }) => (
-  <svg
-    className="input-icon"
-    viewBox="0 0 24 24"
-    fill={color}
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
-    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zM12 11.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5 14.5 7.62 14.5 9 13.38 11.5 12 11.5z" />
-  </svg>
-);
 
 function debounce(func, delay) {
   let timer;
@@ -29,25 +17,21 @@ function debounce(func, delay) {
 }
 
 const Rides = () => {
-  const apiKey = "b20fbcf917ef4227ba363e7b7db7515b";
+  const LOCATIONIQ_API_KEY = "pk.04ae3b424787d702be2274b38a10e158";
 
   const [center, setCenter] = useState(defaultCenter);
-
   const [startLocation, setStartLocation] = useState("");
   const [endLocation, setEndLocation] = useState("");
-
   const [startCoords, setStartCoords] = useState(null);
   const [endCoords, setEndCoords] = useState(null);
-
-  const [startSuggestions, setStartSuggestions] = useState([]);
   const [endSuggestions, setEndSuggestions] = useState([]);
-
-  const [routeCoords, setRouteCoords] = useState([]);
-
-  const [loading, setLoading] = useState(false);
+  const [loadingLocation, setLoadingLocation] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-
   const [nearbyRides, setNearbyRides] = useState([]);
+  const [isSuggestionsVisible, setIsSuggestionsVisible] = useState(false);
+  const [selectedRide, setSelectedRide] = useState(null);
+  const [loadingRides, setLoadingRides] = useState(false);
 
   const { activeAccount, addRideHistory } = useAuth();
   const navigate = useNavigate();
@@ -58,339 +42,369 @@ const Rides = () => {
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
-      (pos) => setCenter([pos.coords.latitude, pos.coords.longitude]),
+      (pos) => {
+        const newCenter = [pos.coords.latitude, pos.coords.longitude];
+        setCenter(newCenter);
+        setStartCoords(newCenter);
+        reverseGeocode(newCenter[0], newCenter[1]);
+      },
       () => console.log("Geolocation denied, using default.")
     );
   }, []);
 
-  const fetchSuggestions = async (query, setSuggestions) => {
-    if (!query) {
-      setSuggestions([]);
+  const reverseGeocode = async (lat, lon) => {
+    try {
+      const response = await fetch(
+        `https://us1.locationiq.com/v1/reverse.php?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${lon}&format=json`
+      );
+      if (!response.ok) throw new Error("Failed to get address from coordinates");
+
+      const data = await response.json();
+      const addressParts = data.address || {};
+      const formattedAddress = `${addressParts.road || ""} ${
+        addressParts.neighbourhood || ""
+      }, ${
+        addressParts.city || addressParts.town || addressParts.village || ""
+      }, ${addressParts.state || ""}, ${addressParts.country || ""}`
+        .replace(/\s+/g, " ")
+        .trim();
+
+      setStartLocation(
+        formattedAddress ||
+        data.display_name ||
+        `${lat.toFixed(5)}, ${lon.toFixed(5)}`
+      );
+    } catch (error) {
+      console.error("Reverse geocode error:", error);
+    }
+  };
+
+  const fetchDropoffSuggestionsDebounced = React.useCallback(
+    debounce(async (query) => {
+      if (!query || query.length < 2) return;
+
+      try {
+        setLoadingSuggestions(true);
+        setErrorMsg("");
+
+        const url = `https://us1.locationiq.com/v1/autocomplete.php?key=${LOCATIONIQ_API_KEY}&q=${encodeURIComponent(
+          query
+        )}&countrycodes=LB&limit=5&format=json`;
+
+        const res = await fetch(url);
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`API request failed with status ${res.status}: ${errorText}`);
+        }
+
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error("Invalid response format from API");
+
+        const suggestions = data.map((item) => ({
+          place_id: item.place_id,
+          display_name: item.display_name,
+          lat: item.lat,
+          lon: item.lon,
+        }));
+
+        setEndSuggestions(suggestions);
+        setIsSuggestionsVisible(suggestions.length > 0);
+      } catch (error) {
+        setErrorMsg("Could not load location suggestions. Please wait a few seconds.");
+        setEndSuggestions([]);
+        setIsSuggestionsVisible(false);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 1000),
+    []
+  );
+
+  const handleEndLocationChange = (e) => {
+    const value = e.target.value;
+    setEndLocation(value);
+    setEndCoords(null);
+    setSelectedRide(null);
+
+    if (value.trim().length > 1) {
+      fetchDropoffSuggestionsDebounced(value.trim());
+    } else {
+      setEndSuggestions([]);
+      setIsSuggestionsVisible(false);
+    }
+  };
+
+  const handleSuggestionClick = async (suggestion) => {
+    setEndLocation(suggestion.display_name);
+    const newEndCoords = [parseFloat(suggestion.lat), parseFloat(suggestion.lon)];
+    setEndCoords(newEndCoords);
+    setIsSuggestionsVisible(false);
+    setErrorMsg("");
+    
+    // Fetch rides near the start location
+    await fetchNearbyRides(newEndCoords);
+  };
+
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setErrorMsg("Geolocation is not supported by your browser.");
       return;
     }
 
-    const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-      query
-    )}&limit=5&apiKey=${apiKey}`;
+    setLoadingLocation(true);
 
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      const filteredResults = (data.results || []).filter(
-        (place) => place && place.properties && place.properties.formatted
-      );
-      setSuggestions(filteredResults);
-    } catch (err) {
-      console.error("Autocomplete fetch error:", err);
-      setSuggestions([]);
-    }
-  };
-
-  const debouncedFetchStartSuggestions = React.useCallback(
-    debounce((val) => fetchSuggestions(val, setStartSuggestions), 300),
-    []
-  );
-  const debouncedFetchEndSuggestions = React.useCallback(
-    debounce((val) => fetchSuggestions(val, setEndSuggestions), 300),
-    []
-  );
-
-  const geocodeAddress = async (address) => {
-    const response = await fetch(
-      `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(
-        address
-      )}&limit=1&apiKey=${apiKey}`
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        setStartCoords([lat, lon]);
+        setCenter([lat, lon]);
+        await reverseGeocode(lat, lon);
+        await fetchNearbyRides([lat, lon]);
+        setLoadingLocation(false);
+      },
+      (error) => {
+        setErrorMsg("Unable to retrieve your location: " + error.message);
+        setLoadingLocation(false);
+      }
     );
-    const data = await response.json();
-    if (data.features && data.features.length > 0) {
-      const [lon, lat] = data.features[0].geometry.coordinates;
-      return [lat, lon];
-    } else {
-      throw new Error(`Address not found: ${address}`);
-    }
   };
 
-  useEffect(() => {
-    if (!startCoords) return;
-
-    async function fetchNearbyRides() {
-      try {
-        const res = await fetch(
-          `https://localhost:7221/api/rides?nearLat=${startCoords[0]}&nearLon=${startCoords[1]}`
-        );
-        const data = await res.json();
-        setNearbyRides(data);
-      } catch (err) {
-        console.error("Nearby rides fetch error:", err);
-        setNearbyRides([]);
-      }
-    }
-
-    fetchNearbyRides();
-  }, [startCoords]);
-
-  const handleRequestRide = async () => {
-    setErrorMsg("");
-    setLoading(true);
-    setRouteCoords([]);
+  const fetchNearbyRides = async (coords) => {
+    if (!coords) return;
+    
     try {
-      if (!startLocation || !endLocation) {
-        setErrorMsg("Please enter both start and end locations.");
-        setLoading(false);
-        return;
-      }
-
-      let start = startCoords;
-      let end = endCoords;
-
-      if (!start) {
-        start = await geocodeAddress(startLocation);
-        setStartCoords(start);
-      }
-      if (!end) {
-        end = await geocodeAddress(endLocation);
-        setEndCoords(end);
-      }
-
-      const url = `https://api.geoapify.com/v1/routing?waypoints=${start[0]},${start[1]}|${end[0]},${end[1]}&mode=drive&apiKey=${apiKey}`;
-      const res = await fetch(url);
+      setLoadingRides(true);
+      const res = await fetch(
+        `https://localhost:7221/api/rides?nearLat=${coords[0]}&nearLon=${coords[1]}&radius=5` // 5km radius
+      );
       const data = await res.json();
-
-      if (!data.features || data.features.length === 0) {
-        setErrorMsg("No route found.");
-        setLoading(false);
-        return;
-      }
-
-      const coords = data.features[0].geometry.coordinates.map((c) => [c[1], c[0]]);
-      setRouteCoords(coords);
-
-      addRideHistory({
-        id: Date.now(),
-        startLocation,
-        endLocation,
-        fare: `$${((data.features[0].properties.distance / 1000) * 0.5).toFixed(2)}`,
-        driver: "John Smith",
-        estimatedTime: "~5 mins",
-        date: new Date().toLocaleString(),
-      });
-    } catch (error) {
-      console.error("Route fetch error:", error);
-      setErrorMsg(error.message || "Failed to get route info, please try again.");
+      setNearbyRides(data);
+    } catch (err) {
+      console.error("Nearby rides fetch error:", err);
+      setNearbyRides([]);
     } finally {
-      setLoading(false);
+      setLoadingRides(false);
     }
   };
 
-  const clearStart = () => {
-    setStartLocation("");
-    setStartCoords(null);
-    setStartSuggestions([]);
-    setRouteCoords([]);
-    setErrorMsg("");
+  const handleRequestRide = async (ride) => {
+    if (!activeAccount) {
+      navigate("/signup");
+      return;
+    }
+
+    try {
+      setErrorMsg("");
+      setSelectedRide(ride);
+
+      // In a real app, you would send this request to your backend
+      const res = await fetch("https://localhost:7221/api/rides/request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rideId: ride.id,
+          passengerId: activeAccount.id,
+          startLocation,
+          endLocation,
+          startCoords,
+          endCoords,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to request ride");
+      }
+
+      const result = await res.json();
+      alert(`Ride requested successfully! Driver contact: ${ride.driverPhone}`);
+      addRideHistory(result.ride);
+    } catch (error) {
+      setErrorMsg(error.message);
+    }
   };
+
   const clearEnd = () => {
     setEndLocation("");
     setEndCoords(null);
     setEndSuggestions([]);
-    setRouteCoords([]);
+    setIsSuggestionsVisible(false);
+    setSelectedRide(null);
     setErrorMsg("");
   };
 
   return (
     <div className="rides-page-container">
-      <h2 className="rides-title">Request a Ride</h2>
+      <div className="rides-card">
+        <h2 className="rides-title">Find Available Rides</h2>
 
-      <form
-        className="rides-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleRequestRide();
-        }}
-        noValidate
-        autoComplete="off"
-      >
-        <div className="input-wrapper">
-          <LocationIcon color="#2563eb" />
-          <input
-            id="startLocation"
-            type="text"
-            placeholder=" "
-            value={startLocation}
-            onChange={(e) => {
-              setStartLocation(e.target.value);
-              setStartCoords(null);
-              debouncedFetchStartSuggestions(e.target.value);
-            }}
-            aria-label="Start Location"
-            required
-          />
-          <label htmlFor="startLocation">Start Location</label>
-          {startLocation && (
-            <button
-              type="button"
-              onClick={clearStart}
-              className="clear-btn"
-              aria-label="Clear start location"
-            >
-              &times;
-            </button>
+        <form className="rides-form" noValidate autoComplete="off">
+          <div className="form-group">
+            <label className="form-label">Pickup Location</label>
+            <div className="location-input-group">
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Current location will appear here"
+                value={startLocation}
+                readOnly
+                aria-label="Start Location"
+                required
+              />
+              <button
+                type="button"
+                onClick={handleGetCurrentLocation}
+                disabled={loadingLocation}
+                className="location-btn"
+              >
+                {loadingLocation ? (
+                  <span className="spinner"></span>
+                ) : (
+                  <svg className="location-icon" viewBox="0 0 24 24">
+                    <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Dropoff Location</label>
+            <div className="suggestions-container">
+              <div className="location-input-group">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Enter dropoff location (e.g., Hamra, Beirut)"
+                  value={endLocation}
+                  onChange={handleEndLocationChange}
+                  aria-label="End Location"
+                  required
+                />
+                {endLocation && (
+                  <button
+                    type="button"
+                    onClick={clearEnd}
+                    className="clear-btn"
+                    aria-label="Clear end location"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+              {loadingSuggestions && (
+                <div className="suggestions-loading">Searching for locations...</div>
+              )}
+              {isSuggestionsVisible && endSuggestions.length > 0 && (
+                <ul className="suggestions-list">
+                  {endSuggestions.map((item) => (
+                    <li
+                      key={item.place_id}
+                      onClick={() => handleSuggestionClick(item)}
+                      className="suggestion-item"
+                    >
+                      {item.display_name}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {errorMsg && (
+            <div className="error-message" role="alert">
+              {errorMsg}
+            </div>
           )}
-          {startSuggestions.length > 0 && (
-            <ul className="suggestions-list">
-              {startSuggestions.map((place) => (
-                <li
-                  key={place.properties.place_id}
-                  onClick={() => {
-                    setStartLocation(place.properties.formatted);
-                    setStartCoords([place.properties.lat, place.properties.lon]);
-                    setStartSuggestions([]);
-                    setRouteCoords([]);
-                    setErrorMsg("");
-                  }}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      setStartLocation(place.properties.formatted);
-                      setStartCoords([place.properties.lat, place.properties.lon]);
-                      setStartSuggestions([]);
-                      setRouteCoords([]);
-                      setErrorMsg("");
-                    }
-                  }}
+        </form>
+
+        {loadingRides ? (
+          <div className="loading-rides">Loading available rides...</div>
+        ) : nearbyRides.length > 0 ? (
+          <div className="available-rides">
+            <h3>Available Rides Near You</h3>
+            <div className="rides-list">
+              {nearbyRides.map((ride) => (
+                <div 
+                  key={ride.id} 
+                  className={`ride-card ${selectedRide?.id === ride.id ? 'selected' : ''}`}
                 >
-                  {place.properties.formatted}
-                </li>
+                  <div className="ride-info">
+                    <h4>{ride.driverName}</h4>
+                    <p><strong>From:</strong> {ride.startAddress}</p>
+                    <p><strong>To:</strong> {ride.endAddress}</p>
+                    <p><strong>Departure:</strong> {new Date(ride.startTime).toLocaleString()}</p>
+                    <p><strong>Price:</strong> ${ride.fare}</p>
+                    <p><strong>Seats:</strong> {ride.availableSeats}</p>
+                    <p><strong>Car:</strong> {ride.carModel} ({ride.carColor})</p>
+                  </div>
+                  <button
+                    onClick={() => handleRequestRide(ride)}
+                    className="request-btn"
+                    disabled={selectedRide !== null}
+                  >
+                    {selectedRide?.id === ride.id ? "Requested" : "Request Ride"}
+                  </button>
+                </div>
               ))}
-            </ul>
-          )}
-        </div>
+            </div>
+          </div>
+        ) : endCoords && !loadingRides ? (
+          <div className="no-rides">No available rides found for this route</div>
+        ) : null}
+      </div>
 
-        <div className="input-wrapper">
-          <LocationIcon color="#ef4444" />
-          <input
-            id="endLocation"
-            type="text"
-            placeholder=" "
-            value={endLocation}
-            onChange={(e) => {
-              setEndLocation(e.target.value);
-              setEndCoords(null);
-              debouncedFetchEndSuggestions(e.target.value);
-            }}
-            aria-label="End Location"
-            required
-          />
-          <label htmlFor="endLocation">End Location</label>
-          {endLocation && (
-            <button
-              type="button"
-              onClick={clearEnd}
-              className="clear-btn"
-              aria-label="Clear end location"
-            >
-              &times;
-            </button>
-          )}
-          {endSuggestions.length > 0 && (
-            <ul className="suggestions-list">
-              {endSuggestions.map((place) => (
-                <li
-                  key={place.properties.place_id}
-                  onClick={() => {
-                    setEndLocation(place.properties.formatted);
-                    setEndCoords([place.properties.lat, place.properties.lon]);
-                    setEndSuggestions([]);
-                    setRouteCoords([]);
-                    setErrorMsg("");
-                  }}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      setEndLocation(place.properties.formatted);
-                      setEndCoords([place.properties.lat, place.properties.lon]);
-                      setEndSuggestions([]);
-                      setRouteCoords([]);
-                      setErrorMsg("");
-                    }
-                  }}
-                >
-                  {place.properties.formatted}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {errorMsg && (
-          <p className="error-message" role="alert">
-            {errorMsg}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          className="rides-btn"
-          disabled={loading || !startLocation || !endLocation}
-          aria-busy={loading}
+      <div className="map-container">
+        <MapContainer 
+          center={center} 
+          zoom={13} 
+          className="map"
+          style={{ height: "100%", width: "100%", borderRadius: "8px" }}
         >
-          {loading ? "Requesting..." : "Request Ride"}
-        </button>
-      </form>
-
-      <div className="map-wrapper" role="region" aria-label="Ride route map">
-        <MapContainer center={center} zoom={13} style={{ height: "400px", width: "100%" }}>
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> contributors'
           />
 
-          {startSuggestions.map((place) => (
-            <Marker
-              key={"start-" + place.properties.place_id}
-              position={[place.properties.lat, place.properties.lon]}
-              opacity={0.5}
-            >
-              <Popup>{place.properties.formatted}</Popup>
-            </Marker>
-          ))}
-          {endSuggestions.map((place) => (
-            <Marker
-              key={"end-" + place.properties.place_id}
-              position={[place.properties.lat, place.properties.lon]}
-              opacity={0.5}
-            >
-              <Popup>{place.properties.formatted}</Popup>
-            </Marker>
-          ))}
-
           {startCoords && (
             <Marker position={startCoords}>
-              <Popup>Start Location: {startLocation}</Popup>
+              <Popup>Your Location: {startLocation}</Popup>
             </Marker>
           )}
           {endCoords && (
             <Marker position={endCoords}>
-              <Popup>End Location: {endLocation}</Popup>
+              <Popup>Destination: {endLocation}</Popup>
             </Marker>
           )}
 
-          {routeCoords.length > 0 && <Polyline positions={routeCoords} color="#2563eb" weight={5} />}
-
-          {nearbyRides.map((ride) =>
-            ride.StartLat && ride.StartLon ? (
-              <Marker key={ride.id} position={[ride.StartLat, ride.StartLon]}>
-                <Popup>
-                  <div>
-                    <strong>Driver:</strong> {ride.driverName} <br />
-                    <strong>Car:</strong> {ride.carModel} <br />
-                    <strong>Price:</strong> ${ride.price} <br />
-                    <strong>Seats:</strong> {ride.seats}
-                  </div>
-                </Popup>
-              </Marker>
-            ) : null
-          )}
+          {nearbyRides.map((ride) => (
+            <Marker 
+              key={ride.id} 
+              position={[ride.startLat, ride.startLon]}
+              eventHandlers={{
+                click: () => setSelectedRide(ride),
+              }}
+            >
+              <Popup>
+                <div className="popup-content">
+                  <h4>Available Ride</h4>
+                  <p><strong>Driver:</strong> {ride.driverName}</p>
+                  <p><strong>To:</strong> {ride.endAddress}</p>
+                  <p><strong>Price:</strong> ${ride.fare}</p>
+                  <p><strong>Seats:</strong> {ride.availableSeats}</p>
+                  <button 
+                    onClick={() => handleRequestRide(ride)}
+                    disabled={selectedRide !== null}
+                  >
+                    Request Ride
+                  </button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
         </MapContainer>
       </div>
     </div>

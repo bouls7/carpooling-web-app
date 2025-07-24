@@ -23,7 +23,7 @@ export default function PostRide() {
     EndLat: null,
     EndLon: null,
     Fare: "",
-    SeatsAvailable: "",
+    AvailableSeats: "",
     StartTime: "",
   });
 
@@ -83,13 +83,12 @@ export default function PostRide() {
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    // Clear error for this field on change
     setErrors((prev) => ({ ...prev, [name]: null }));
 
-    if (name === "Fare") {
+    if (name === "Fare" || name === "AvailableSeats") {
       setRideData((prev) => ({
         ...prev,
-        Fare: value === "" ? "" : value,
+        [name]: value === "" ? "" : value,
       }));
       return;
     }
@@ -147,7 +146,6 @@ export default function PostRide() {
             StartLon: lon,
           }));
 
-          // Clear errors on location set
           setErrors((prev) => ({
             ...prev,
             StartAddress: null,
@@ -176,7 +174,6 @@ export default function PostRide() {
     }));
     setIsSuggestionsVisible(false);
 
-    // Clear errors on suggestion select
     setErrors((prev) => ({
       ...prev,
       EndAddress: null,
@@ -207,7 +204,6 @@ export default function PostRide() {
       return;
     }
 
-    // Validate fields and collect errors
     const newErrors = {};
     if (!rideData.StartAddress) newErrors.StartAddress = "Pickup location is required.";
     if (!rideData.StartLat || isNaN(parseFloat(rideData.StartLat))) newErrors.StartLat = "Pickup latitude is invalid.";
@@ -219,8 +215,8 @@ export default function PostRide() {
     const fareValue = parseFloat(rideData.Fare);
     if (isNaN(fareValue) || fareValue <= 0) newErrors.Fare = "Fare must be a number greater than 0.";
 
-    const seatsNumber = parseInt(rideData.SeatsAvailable, 10);
-    if (isNaN(seatsNumber) || seatsNumber <= 0) newErrors.SeatsAvailable = "Seats available must be a number greater than 0.";
+    const seatsNumber = parseInt(rideData.AvailableSeats, 10);
+    if (isNaN(seatsNumber) || seatsNumber <= 0) newErrors.AvailableSeats = "Seats available must be a number greater than 0.";
 
     if (!rideData.StartTime) newErrors.StartTime = "Start time is required.";
 
@@ -230,7 +226,7 @@ export default function PostRide() {
     }
 
     const newRide = {
-      UserId: activeAccount.id || 1, // use activeAccount id if available
+      UserId: 1,
       StartAddress: rideData.StartAddress.trim(),
       StartLat: parseFloat(rideData.StartLat),
       StartLon: parseFloat(rideData.StartLon),
@@ -238,8 +234,8 @@ export default function PostRide() {
       EndLat: parseFloat(rideData.EndLat),
       EndLon: parseFloat(rideData.EndLon),
       Fare: fareValue,
-      SeatsAvailable: seatsNumber,
-      StartTime: rideData.StartTime,
+      AvailableSeats: seatsNumber,
+      StartTime: new Date(rideData.StartTime).toISOString()
     };
 
     try {
@@ -271,7 +267,7 @@ export default function PostRide() {
         EndLat: null,
         EndLon: null,
         Fare: "",
-        SeatsAvailable: "",
+        AvailableSeats: "",
         StartTime: "",
       });
       setErrors({});
@@ -292,13 +288,10 @@ export default function PostRide() {
           value={rideData.StartAddress}
           readOnly
           required
-          aria-describedby="startAddressError"
           className={errors.StartAddress ? "input-error" : ""}
         />
         {errors.StartAddress && (
-          <div id="startAddressError" className="error-message">
-            {errors.StartAddress}
-          </div>
+          <div className="error-message">{errors.StartAddress}</div>
         )}
         <button
           type="button"
@@ -319,7 +312,6 @@ export default function PostRide() {
             onChange={handleChange}
             required
             autoComplete="off"
-            aria-describedby="endAddressError"
             className={errors.EndAddress ? "input-error" : ""}
           />
           {loadingSuggestions && (
@@ -344,9 +336,7 @@ export default function PostRide() {
             </ul>
           )}
           {errors.EndAddress && (
-            <div id="endAddressError" className="error-message">
-              {errors.EndAddress}
-            </div>
+            <div className="error-message">{errors.EndAddress}</div>
           )}
         </div>
 
@@ -360,32 +350,23 @@ export default function PostRide() {
           step="0.01"
           min="0.01"
           required
-          inputMode="decimal"
-          aria-describedby="fareError"
           className={errors.Fare ? "input-error" : ""}
         />
-        {errors.Fare && (
-          <div id="fareError" className="error-message">
-            {errors.Fare}
-          </div>
-        )}
+        {errors.Fare && <div className="error-message">{errors.Fare}</div>}
 
         <label>Seats Available</label>
         <input
           type="number"
-          name="SeatsAvailable"
+          name="AvailableSeats"
           placeholder="Number of seats available"
-          value={rideData.SeatsAvailable}
+          value={rideData.AvailableSeats}
           onChange={handleChange}
           min="1"
           required
-          aria-describedby="seatsAvailableError"
-          className={errors.SeatsAvailable ? "input-error" : ""}
+          className={errors.AvailableSeats ? "input-error" : ""}
         />
-        {errors.SeatsAvailable && (
-          <div id="seatsAvailableError" className="error-message">
-            {errors.SeatsAvailable}
-          </div>
+        {errors.AvailableSeats && (
+          <div className="error-message">{errors.AvailableSeats}</div>
         )}
 
         <label>Start Time</label>
@@ -395,13 +376,10 @@ export default function PostRide() {
           value={rideData.StartTime}
           onChange={handleChange}
           required
-          aria-describedby="startTimeError"
           className={errors.StartTime ? "input-error" : ""}
         />
         {errors.StartTime && (
-          <div id="startTimeError" className="error-message">
-            {errors.StartTime}
-          </div>
+          <div className="error-message">{errors.StartTime}</div>
         )}
 
         <button type="submit" className="post-ride-btn">

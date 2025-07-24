@@ -112,7 +112,7 @@
   max-height: 250px;
   overflow-y: auto;
   background: rgba(255, 255, 255, 0.95); /* slightly transparent */
-  border: 2px solid red; /* temporary for debugging */
+  border: 2px solid #0056b3; /* temporary for debugging */
   border-radius: 0 0 8px 8px;
   list-style: none;
   padding: 0;
@@ -154,6 +154,15 @@
 
 .suggestions-list, .suggestion-item {
   pointer-events: auto;
+}
+
+
+
+.suggestion-item:hover,
+.suggestion-item:focus {
+  background-color: var(--primary-color);
+  color: #fff;
+  outline: none;
 }
 
 .input-error {
