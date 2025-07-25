@@ -32,25 +32,39 @@ const Rides = () => {
   const [isSuggestionsVisible, setIsSuggestionsVisible] = useState(false);
   const [selectedRide, setSelectedRide] = useState(null);
   const [loadingRides, setLoadingRides] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(null);
+
+  // Store list of ride IDs that the user has requested
+  const [requestedRides, setRequestedRides] = useState([]);
 
   const { activeAccount, addRideHistory } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!activeAccount) navigate("/signup");
-  }, [activeAccount, navigate]);
+    if (!activeAccount) {
+      navigate("/signup");
+      return;
+    }
+    fetchUserRequestedRides();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAccount]);
 
-  useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const newCenter = [pos.coords.latitude, pos.coords.longitude];
-        setCenter(newCenter);
-        setStartCoords(newCenter);
-        reverseGeocode(newCenter[0], newCenter[1]);
-      },
-      () => console.log("Geolocation denied, using default.")
-    );
-  }, []);
+  // Fetch rides the user already requested from backend
+  const fetchUserRequestedRides = async () => {
+    try {
+      const res = await fetch(
+        `https://localhost:7221/api/rides/userrequests?passengerId=${activeAccount.id}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch your ride requests");
+
+      const data = await res.json();
+      const rideIds = data.map((ride) => (typeof ride === "object" ? ride.id : ride));
+      setRequestedRides(rideIds);
+    } catch (err) {
+      console.error(err);
+      setRequestedRides([]);
+    }
+  };
 
   const reverseGeocode = async (lat, lon) => {
     try {
@@ -63,16 +77,16 @@ const Rides = () => {
       const addressParts = data.address || {};
       const formattedAddress = `${addressParts.road || ""} ${
         addressParts.neighbourhood || ""
-      }, ${
-        addressParts.city || addressParts.town || addressParts.village || ""
-      }, ${addressParts.state || ""}, ${addressParts.country || ""}`
+      }, ${addressParts.city || addressParts.town || addressParts.village || ""}, ${
+        addressParts.state || ""
+      }, ${addressParts.country || ""}`
         .replace(/\s+/g, " ")
         .trim();
 
       setStartLocation(
         formattedAddress ||
-        data.display_name ||
-        `${lat.toFixed(5)}, ${lon.toFixed(5)}`
+          data.display_name ||
+          `${lat.toFixed(5)}, ${lon.toFixed(5)}`
       );
     } catch (error) {
       console.error("Reverse geocode error:", error);
@@ -92,14 +106,9 @@ const Rides = () => {
         )}&countrycodes=LB&limit=5&format=json`;
 
         const res = await fetch(url);
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`API request failed with status ${res.status}: ${errorText}`);
-        }
+        if (!res.ok) throw new Error(`API request failed`);
 
         const data = await res.json();
-        if (!Array.isArray(data)) throw new Error("Invalid response format from API");
-
         const suggestions = data.map((item) => ({
           place_id: item.place_id,
           display_name: item.display_name,
@@ -140,9 +149,6 @@ const Rides = () => {
     setEndCoords(newEndCoords);
     setIsSuggestionsVisible(false);
     setErrorMsg("");
-    
-    // Fetch rides near the start location
-    await fetchNearbyRides(newEndCoords);
   };
 
   const handleGetCurrentLocation = () => {
@@ -157,10 +163,11 @@ const Rides = () => {
       async (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
-        setStartCoords([lat, lon]);
-        setCenter([lat, lon]);
+        const coords = [lat, lon];
+        setStartCoords(coords);
+        setCenter(coords);
         await reverseGeocode(lat, lon);
-        await fetchNearbyRides([lat, lon]);
+        await fetchNearbyRides(coords);
         setLoadingLocation(false);
       },
       (error) => {
@@ -172,25 +179,53 @@ const Rides = () => {
 
   const fetchNearbyRides = async (coords) => {
     if (!coords) return;
-    
+
     try {
       setLoadingRides(true);
       const res = await fetch(
-        `https://localhost:7221/api/rides?nearLat=${coords[0]}&nearLon=${coords[1]}&radius=5` // 5km radius
+        `https://localhost:7221/api/rides?nearLat=${coords[0]}&nearLon=${coords[1]}&radius=5`
       );
+      if (!res.ok) throw new Error("Failed to fetch nearby rides");
+
       const data = await res.json();
       setNearbyRides(data);
+      setLastRefresh(new Date());
     } catch (err) {
       console.error("Nearby rides fetch error:", err);
+      setErrorMsg("Failed to load nearby rides. Please try again.");
       setNearbyRides([]);
     } finally {
       setLoadingRides(false);
     }
   };
 
+  // Helper to parse departureTime as UTC date safely
+  const parseDepartureTimeUTC = (departureTime) => {
+    const parts = departureTime.split(/[- :T]/);
+    return new Date(
+      Date.UTC(
+        parseInt(parts[0]),
+        parseInt(parts[1], 10) - 1,
+        parseInt(parts[2], 10),
+        parseInt(parts[3] || "0", 10),
+        parseInt(parts[4] || "0", 10),
+        parseInt(parts[5] || "0", 10)
+      )
+    );
+  };
+
+  // Request a ride by POSTing to the backend
   const handleRequestRide = async (ride) => {
     if (!activeAccount) {
       navigate("/signup");
+      return;
+    }
+
+    const rideDepartureTime = parseDepartureTimeUTC(ride.departureTime);
+    const now = new Date();
+
+    if (rideDepartureTime.getTime() < now.getTime()) {
+      setErrorMsg("This ride has already started and is no longer available");
       return;
     }
 
@@ -198,7 +233,6 @@ const Rides = () => {
       setErrorMsg("");
       setSelectedRide(ride);
 
-      // In a real app, you would send this request to your backend
       const res = await fetch("https://localhost:7221/api/rides/request", {
         method: "POST",
         headers: {
@@ -221,7 +255,52 @@ const Rides = () => {
 
       const result = await res.json();
       alert(`Ride requested successfully! Driver contact: ${ride.driverPhone}`);
+
       addRideHistory(result.ride);
+
+      // Add this ride ID to requestedRides to show cancel button
+      setRequestedRides((prev) => [...prev, ride.id]);
+
+      if (startCoords) {
+        fetchNearbyRides(startCoords);
+      }
+    } catch (error) {
+      setErrorMsg(error.message);
+    }
+  };
+
+  // Cancel ride request by POST to backend (adjust if your backend supports DELETE)
+  const handleCancelRide = async (ride) => {
+    if (!activeAccount) {
+      navigate("/signup");
+      return;
+    }
+
+    try {
+      const res = await fetch("https://localhost:7221/api/rides/cancel", {
+        method: "POST", // Use DELETE if supported
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rideId: ride.id,
+          passengerId: activeAccount.id,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to cancel ride");
+      }
+
+      alert("Ride request cancelled.");
+
+      // Remove ride ID from requestedRides
+      setRequestedRides((prev) => prev.filter((id) => id !== ride.id));
+
+      if (startCoords) {
+        fetchNearbyRides(startCoords);
+      }
     } catch (error) {
       setErrorMsg(error.message);
     }
@@ -236,10 +315,33 @@ const Rides = () => {
     setErrorMsg("");
   };
 
+  const handleRefreshRides = () => {
+    if (startCoords) {
+      fetchNearbyRides(startCoords);
+    }
+  };
+
+  // Normalize requested ride IDs for comparison
+  const requestedRidesSet = new Set(requestedRides.map(String));
+
   return (
     <div className="rides-page-container">
       <div className="rides-card">
-        <h2 className="rides-title">Find Available Rides</h2>
+        <div className="rides-header">
+          <h2 className="rides-title">Find Available Rides</h2>
+          {lastRefresh && (
+            <div className="refresh-info">
+              <small>Last refreshed: {lastRefresh.toLocaleTimeString()}</small>
+              <button
+                onClick={handleRefreshRides}
+                disabled={loadingRides}
+                className="refresh-btn"
+              >
+                {loadingRides ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+          )}
+        </div>
 
         <form className="rides-form" noValidate autoComplete="off">
           <div className="form-group">
@@ -248,7 +350,7 @@ const Rides = () => {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Current location will appear here"
+                placeholder="Click the button to detect your location"
                 value={startLocation}
                 readOnly
                 aria-label="Start Location"
@@ -320,47 +422,12 @@ const Rides = () => {
             </div>
           )}
         </form>
-
-        {loadingRides ? (
-          <div className="loading-rides">Loading available rides...</div>
-        ) : nearbyRides.length > 0 ? (
-          <div className="available-rides">
-            <h3>Available Rides Near You</h3>
-            <div className="rides-list">
-              {nearbyRides.map((ride) => (
-                <div 
-                  key={ride.id} 
-                  className={`ride-card ${selectedRide?.id === ride.id ? 'selected' : ''}`}
-                >
-                  <div className="ride-info">
-                    <h4>{ride.driverName}</h4>
-                    <p><strong>From:</strong> {ride.startAddress}</p>
-                    <p><strong>To:</strong> {ride.endAddress}</p>
-                    <p><strong>Departure:</strong> {new Date(ride.startTime).toLocaleString()}</p>
-                    <p><strong>Price:</strong> ${ride.fare}</p>
-                    <p><strong>Seats:</strong> {ride.availableSeats}</p>
-                    <p><strong>Car:</strong> {ride.carModel} ({ride.carColor})</p>
-                  </div>
-                  <button
-                    onClick={() => handleRequestRide(ride)}
-                    className="request-btn"
-                    disabled={selectedRide !== null}
-                  >
-                    {selectedRide?.id === ride.id ? "Requested" : "Request Ride"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : endCoords && !loadingRides ? (
-          <div className="no-rides">No available rides found for this route</div>
-        ) : null}
       </div>
 
       <div className="map-container">
-        <MapContainer 
-          center={center} 
-          zoom={13} 
+        <MapContainer
+          center={center}
+          zoom={13}
           className="map"
           style={{ height: "100%", width: "100%", borderRadius: "8px" }}
         >
@@ -380,31 +447,61 @@ const Rides = () => {
             </Marker>
           )}
 
-          {nearbyRides.map((ride) => (
-            <Marker 
-              key={ride.id} 
-              position={[ride.startLat, ride.startLon]}
-              eventHandlers={{
-                click: () => setSelectedRide(ride),
-              }}
-            >
-              <Popup>
-                <div className="popup-content">
-                  <h4>Available Ride</h4>
-                  <p><strong>Driver:</strong> {ride.driverName}</p>
-                  <p><strong>To:</strong> {ride.endAddress}</p>
-                  <p><strong>Price:</strong> ${ride.fare}</p>
-                  <p><strong>Seats:</strong> {ride.availableSeats}</p>
-                  <button 
-                    onClick={() => handleRequestRide(ride)}
-                    disabled={selectedRide !== null}
-                  >
-                    Request Ride
-                  </button>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+          {nearbyRides.map((ride) => {
+            const rideDepartureTime = parseDepartureTimeUTC(ride.departureTime);
+            const now = new Date();
+            const rideHasStarted = rideDepartureTime.getTime() < now.getTime();
+
+            const isRequested = requestedRidesSet.has(String(ride.id));
+
+            return (
+              <Marker
+                key={ride.id}
+                position={[ride.startLat, ride.startLon]}
+                eventHandlers={{
+                  click: () => setSelectedRide(ride),
+                }}
+              >
+                <Popup>
+                  <div className="popup-content">
+                    <h4>Available Ride</h4>
+                    <p><strong>Ride ID:</strong> {ride.id}</p>
+                    <p><strong>Driver:</strong> {ride.driverName}</p>
+                    <p><strong>From:</strong> {ride.startAddress}</p>
+                    <p><strong>To:</strong> {ride.endAddress}</p>
+                    <p><strong>Price:</strong> ${ride.fare}</p>
+                    <p><strong>Seats:</strong> {ride.availableSeats}</p>
+                    <p><strong>Departure:</strong> {rideDepartureTime.toLocaleString()}</p>
+
+                    {!rideHasStarted && !isRequested && (
+                      <button
+                        onClick={() => handleRequestRide(ride)}
+                        className="request-btn"
+                      >
+                        Request Ride
+                      </button>
+                    )}
+
+                    {!rideHasStarted && isRequested && (
+                      <button
+                        onClick={() => handleCancelRide(ride)}
+                        className="cancel-btn"
+                        style={{ backgroundColor: "#f44336", color: "#fff" }}
+                      >
+                        Cancel Request
+                      </button>
+                    )}
+
+                    {rideHasStarted && (
+                      <button className="request-btn" disabled>
+                        Not Available
+                      </button>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
       </div>
     </div>

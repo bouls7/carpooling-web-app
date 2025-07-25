@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
     return storedActiveId ? JSON.parse(storedActiveId) : null;
   });
 
-  // Save accounts and activeAccountId to localStorage on change
+  // Save to localStorage
   useEffect(() => {
     localStorage.setItem("accounts", JSON.stringify(accounts));
   }, [accounts]);
@@ -25,7 +25,12 @@ export const AuthProvider = ({ children }) => {
 
   // Find activeAccount object from accounts by activeAccountId
   const activeAccount = accounts.find(acc => acc.id === activeAccountId) || null;
-  const isLoggedIn = activeAccountId !== null;
+
+  // Show true only if logged in
+  const isLoggedIn = activeAccount !== null;
+
+  // Safely extract name or fallback to 'Anonymous'
+  const activeName = activeAccount?.name || "Anonymous";
 
   const addRideHistory = (ride) => {
     setAccounts(prev =>
@@ -40,13 +45,16 @@ export const AuthProvider = ({ children }) => {
     );
   };
 
-  // Modified: returns the new account's ID after adding
   const addAccount = (account) => {
-    const newAccount = { ...account, id: Date.now(), rideHistory: [] };
+    const newAccount = {
+      ...account,
+      id: Date.now(),
+      rideHistory: [],
+    };
     const updatedAccounts = [...accounts, newAccount];
     setAccounts(updatedAccounts);
     setActiveAccountId(newAccount.id);
-    return newAccount.id; // <-- return ID to caller
+    return newAccount.id;
   };
 
   const switchAccount = (accountId) => {
@@ -77,6 +85,7 @@ export const AuthProvider = ({ children }) => {
         activeAccount,
         activeAccountId,
         isLoggedIn,
+        activeName, // ✅ Export this
         addAccount,
         switchAccount,
         removeAccount,

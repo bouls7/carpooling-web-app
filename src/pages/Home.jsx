@@ -24,7 +24,6 @@ const slides = [
   },
 ];
 
-// Default testimonials
 const initialTestimonials = [
   {
     text: "Poolify saved me so much money on my daily commute! Highly recommend it.",
@@ -46,11 +45,16 @@ const initialTestimonials = [
   },
 ];
 
-// Star rating component
+// StarRating component for both readOnly and interactive ratings
 function StarRating({ rating, setRating, readOnly = false }) {
   const stars = [1, 2, 3, 4, 5];
   return (
-    <div className="star-rating" style={{ cursor: readOnly ? "default" : "pointer" }}>
+    <div
+      className="star-rating"
+      style={{ cursor: readOnly ? "default" : "pointer" }}
+      aria-label={readOnly ? `Rating: ${rating} out of 5 stars` : "Rate this service"}
+      role={readOnly ? "img" : undefined}
+    >
       {stars.map((star) => (
         <span
           key={star}
@@ -78,7 +82,7 @@ function StarRating({ rating, setRating, readOnly = false }) {
 }
 
 export default function Home() {
-  const { isLoggedIn, role } = useAuth();
+  const { isLoggedIn, role, activeAccount } = useAuth();
   const navigate = useNavigate();
 
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -89,12 +93,11 @@ export default function Home() {
   const visibleCount = 3;
   const minForCarousel = 5;
 
-  // Combine default and backend feedbacks
   const feedbacks = [...initialTestimonials, ...backendFeedbacks];
   const maxIndex = Math.max(0, feedbacks.length - visibleCount);
   const showCarousel = feedbacks.length >= minForCarousel;
 
-  // Hero auto-slide effect
+  // Slide carousel auto-rotation
   useEffect(() => {
     const timer = setTimeout(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);
@@ -102,7 +105,7 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [currentSlide]);
 
-  // Fetch feedbacks from backend on mount
+  // Fetch feedbacks from backend API
   useEffect(() => {
     fetch(`${backendUrl}/api/feedbacks`)
       .then((res) => {
@@ -121,6 +124,7 @@ export default function Home() {
       .catch(console.error);
   }, []);
 
+  // Navigation handler based on user login & role
   const handleRedirect = (path) => {
     if (!isLoggedIn) return navigate("/signup");
     if (path === "/postride" && role !== "driver") {
@@ -130,6 +134,7 @@ export default function Home() {
     navigate(path);
   };
 
+  // Form input change handler
   const handleFeedbackChange = (e) => {
     const { name, value } = e.target;
     setNewFeedback((prev) => ({
@@ -138,10 +143,12 @@ export default function Home() {
     }));
   };
 
+  // Star rating click handler
   const handleRatingChange = (rate) => {
     setNewFeedback((prev) => ({ ...prev, rate }));
   };
 
+  // Submit new feedback to backend
   const handleFeedbackSubmit = (e) => {
     e.preventDefault();
 
@@ -151,16 +158,14 @@ export default function Home() {
       return;
     }
 
-    // Build payload conditionally
+    const author =
+      newFeedback.author?.trim() || (isLoggedIn ? activeAccount?.name : null) || "Anonymous";
+
     const payload = {
       comment,
       rate: newFeedback.rate,
+      author,
     };
-
-    // Add author only if NOT logged in (anonymous)
-    if (!isLoggedIn) {
-      payload.author = newFeedback.author?.trim() || "Anonymous";
-    }
 
     fetch(`${backendUrl}/api/feedbacks`, {
       method: "POST",
@@ -179,7 +184,7 @@ export default function Home() {
       .then((savedFeedback) => {
         const mapped = {
           text: savedFeedback.comment,
-          author: savedFeedback.author || newFeedback.author || "Anonymous",
+          author: savedFeedback.author || author || "Anonymous",
           rate: savedFeedback.rate,
           id: savedFeedback.feedbackId,
         };
@@ -189,6 +194,7 @@ export default function Home() {
       .catch((err) => alert(err.message));
   };
 
+  // Slice feedbacks for carousel view
   const visibleFeedbacks = showCarousel
     ? feedbacks.slice(index, index + visibleCount)
     : feedbacks;
@@ -196,7 +202,7 @@ export default function Home() {
   return (
     <>
       <div className="home-container">
-        {/* Hero Section */}
+        {/* Hero slideshow */}
         <section className="hero slideshow" aria-label="Homepage slides">
           {slides.map((slide, i) => (
             <div
@@ -266,7 +272,6 @@ export default function Home() {
       <section className="testimonials-section" aria-label="User feedback and testimonials">
         <h2 className="section-title">Feedbacks</h2>
 
-        {/* Carousel */}
         <div
           className="carousel-container"
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "1rem" }}
@@ -311,52 +316,63 @@ export default function Home() {
           )}
         </div>
 
-        {/* Feedback form */}
-        <form className="feedback-form" onSubmit={handleFeedbackSubmit} noValidate>
-          <h3 className="form-heading">Leave Your Feedback</h3>
+        {/* Feedback submission form */}
+        {isLoggedIn ? (
+          <form className="feedback-form" onSubmit={handleFeedbackSubmit} noValidate>
+            <h3 className="form-heading">Leave Your Feedback</h3>
 
-          <div className="form-group">
-            <textarea
-              name="text"
-              placeholder="Your feedback..."
-              value={newFeedback.text}
-              onChange={handleFeedbackChange}
-              maxLength={300}
-              required
-              aria-required="true"
-              aria-describedby="feedback-desc"
-            />
-            <div id="feedback-desc" className="char-count" aria-live="polite">
-              {newFeedback.text.length} / 300
+            <div className="form-group">
+              <textarea
+                name="text"
+                placeholder="Your feedback..."
+                value={newFeedback.text}
+                onChange={handleFeedbackChange}
+                maxLength={300}
+                required
+                aria-required="true"
+                aria-describedby="feedback-desc"
+              />
+              <div id="feedback-desc" className="char-count" aria-live="polite">
+                {newFeedback.text.length} / 300
+              </div>
             </div>
-          </div>
 
-          {/* Always show author input */}
-          <div className="form-group">
-            <input
-              type="text"
-              name="author"
-              placeholder="Your name (optional)"
-              value={newFeedback.author}
-              onChange={handleFeedbackChange}
-              aria-label="Your name"
-            />
-          </div>
+            <div className="form-group">
+              <input
+                type="text"
+                name="author"
+                placeholder="Your name (optional)"
+                value={newFeedback.author}
+                onChange={handleFeedbackChange}
+                aria-label="Your name"
+              />
+            </div>
 
-          <div className="form-group">
-            <label htmlFor="rate">Rate:</label>
-            <StarRating rating={newFeedback.rate} setRating={handleRatingChange} />
-          </div>
+            <div className="form-group">
+              <label htmlFor="rate">Rate:</label>
+              <StarRating rating={newFeedback.rate} setRating={handleRatingChange} />
+            </div>
 
-          <button
-            type="submit"
-            className="btn submit"
-            disabled={newFeedback.text.trim().length < 10}
-            aria-disabled={newFeedback.text.trim().length < 10}
-          >
-            Submit
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="btn submit"
+              disabled={newFeedback.text.trim().length < 10}
+              aria-disabled={newFeedback.text.trim().length < 10}
+            >
+              Submit
+            </button>
+          </form>
+        ) : (
+          <div className="feedback-logged-out-prompt">
+            <p>
+              Please{" "}
+              <button className="link-button" onClick={() => navigate("/signup")}>
+                sign up or log in
+              </button>{" "}
+              to leave your feedback.
+            </p>
+          </div>
+        )}
       </section>
     </>
   );

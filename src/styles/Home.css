@@ -245,8 +245,16 @@ body::-webkit-scrollbar-thumb {
   justify-content: center;
   flex-wrap: nowrap;
   overflow-y: hidden;
-  overflow-x: visible;
+  overflow-x: hidden; /* hide horizontal scrollbar */
   max-width: 100%;
+
+  /* Hide scrollbar for various browsers */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+
+.carousel-track::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
 }
 
 .testimonial {
@@ -313,7 +321,7 @@ body::-webkit-scrollbar-thumb {
   cursor: default;
 }
 
-/* ✅ FIXED SUBMIT BUTTON */
+/* Submit Button */
 .feedback-form .btn.submit {
   display: block;
   width: 100%;
@@ -412,6 +420,46 @@ body::-webkit-scrollbar-thumb {
   font-weight: 600;
   font-family: 'Segoe UI', sans-serif;
   letter-spacing: 0.02em;
+}
+
+/* Feedback logged out prompt */
+.feedback-logged-out-prompt {
+  max-width: 450px;
+  margin: 4rem auto;
+  padding: 2rem 1.5rem;
+  background: #f0f4ff;
+  border: 2px solid var(--primary-color);
+  border-radius: 30px;
+  text-align: center;
+  font-size: 1.1rem;
+  color: var(--primary-color-dark);
+  font-weight: 600;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  box-shadow: 0 5px 15px rgba(0, 123, 255, 0.2);
+}
+
+.feedback-logged-out-prompt p {
+  margin: 0;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 0;
+  margin-left: 6px;
+  transition: color 0.25s ease;
+}
+
+.link-button:hover,
+.link-button:focus {
+  color: var(--primary-color-dark);
+  outline: none;
+  text-decoration: none;
 }
 
 /* Mobile Responsive */

@@ -15,7 +15,7 @@ export default function SignUp() {
     licenseNumber: "",
     carPlate: "",
     carModel: "",
-    seats: 4,
+    phoneNumber: ""
   });
 
   const [isLoginMode, setIsLoginMode] = useState(false);
@@ -71,16 +71,23 @@ export default function SignUp() {
           showPopup("Please enter your car model.");
           return;
         }
+        if (!formData.phoneNumber.trim()) {
+          showPopup("Please enter your phone number.");
+          return;
+        }
       }
     }
 
     try {
       if (isLoginMode) {
-        const token = await loginUser({
+        const { token, role, userId } = await loginUser({
           email: formData.email,
           password: formData.password,
         });
+
         localStorage.setItem("token", token);
+        localStorage.setItem("userRole", role);
+        localStorage.setItem("userId", userId);
 
         const existingAccount = accounts.find(
           (acc) => acc.email === formData.email
@@ -93,7 +100,8 @@ export default function SignUp() {
             email: formData.email,
             fullName: formData.fullName || "",
             token,
-            role: "passenger",
+            role,
+            userId,
           });
           switchAccount(newId);
         }
@@ -102,46 +110,47 @@ export default function SignUp() {
         return;
       }
 
+      const signupData = {
+        Name: formData.fullName,
+        Email: formData.email,
+        Password: formData.password,
+        Role: formData.role,
+      };
+
       if (formData.role === "driver") {
-        // Driver signup as JSON (no file upload)
-        await signupUser({
-          name: formData.fullName,
-          email: formData.email,
-          password: formData.password,
-          licenseNumber: formData.licenseNumber,
-          carPlate: formData.carPlate,
-          carModel: formData.carModel,
-          seats: formData.seats,
-          role: "driver",
-        });
-      } else {
-        // Passenger signup
-        await signupUser({
-          fullName: formData.fullName,
-          email: formData.email,
-          password: formData.password,
-          role: "passenger",
-        });
+        signupData.LicenseNumber = formData.licenseNumber;
+        signupData.CarPlate = formData.carPlate;
+        signupData.CarModel = formData.carModel;
+        signupData.PhoneNumber = formData.phoneNumber;
       }
 
-      const token = await loginUser({
+      await signupUser(signupData);
+
+      const { token, role, userId } = await loginUser({
         email: formData.email,
         password: formData.password,
       });
 
       localStorage.setItem("token", token);
+      localStorage.setItem("userRole", role);
+      localStorage.setItem("userId", userId);
 
       const newId = addAccount({
         email: formData.email,
         fullName: formData.fullName,
         token,
-        role: formData.role,
+        role,
+        userId,
+        licenseNumber: formData.licenseNumber,
+        carPlate: formData.carPlate,
+        carModel: formData.carModel,
+        phoneNumber: formData.phoneNumber
       });
-      switchAccount(newId);
 
+      switchAccount(newId);
       showPopup("Signup successful! Redirecting...", () => navigate("/"));
     } catch (err) {
-      showPopup(err?.response?.data?.message || err.message || "Signup failed.");
+      showPopup(err?.message || "Signup failed.");
     }
   };
 
@@ -208,9 +217,7 @@ export default function SignUp() {
 
             <div className="role-selection">
               <div
-                className={`role-option ${
-                  formData.role === "passenger" ? "selected" : ""
-                }`}
+                className={`role-option ${formData.role === "passenger" ? "selected" : ""}`}
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, role: "passenger" }))
                 }
@@ -219,9 +226,7 @@ export default function SignUp() {
                 <div className="label">Passenger</div>
               </div>
               <div
-                className={`role-option ${
-                  formData.role === "driver" ? "selected" : ""
-                }`}
+                className={`role-option ${formData.role === "driver" ? "selected" : ""}`}
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, role: "driver" }))
                 }
@@ -254,6 +259,14 @@ export default function SignUp() {
                   name="carModel"
                   placeholder="Car Model"
                   value={formData.carModel}
+                  onChange={handleChange}
+                  required
+                />
+                <input
+                  type="text"
+                  name="phoneNumber"
+                  placeholder="Phone Number"
+                  value={formData.phoneNumber}
                   onChange={handleChange}
                   required
                 />

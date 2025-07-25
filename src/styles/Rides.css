@@ -19,7 +19,7 @@
   gap: 2rem;
   padding: 2rem;
   max-width: 1200px;
-  margin: 3rem auto;
+  margin: 1.5rem auto; /* Add margin so container doesn't touch navbar/footer */
   font-family: var(--font-family);
   color: var(--text-color);
   background: #fff;
@@ -29,6 +29,10 @@
     -6px -6px 15px var(--input-shadow-light);
   border: 1.5px solid #d1d5db;
   user-select: none;
+  min-height: calc(100vh - 140px); /* Height minus nav/footer approx */
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .rides-card {
@@ -36,6 +40,8 @@
   border-radius: var(--border-radius);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   padding: 2rem;
+  width: 100%;
+  max-width: 400px;
 }
 
 .rides-title {
@@ -205,7 +211,6 @@
   outline: none;
 }
 
-
 .submit-btn {
   width: 100%;
   background:
@@ -287,15 +292,18 @@
   }
 }
 
+/* Desktop layout */
 @media (min-width: 768px) {
   .rides-page-container {
     flex-direction: row;
-    align-items: flex-start;
+    justify-content: center;
+    align-items: center;
   }
 
   .rides-card {
     width: 400px;
     flex-shrink: 0;
+    margin-right: 2rem;
   }
 
   .map-container {
@@ -304,41 +312,58 @@
   }
 }
 
+/* Tablet and mobile layout */
 @media (max-width: 768px) {
   .rides-page-container {
     padding: 1.5rem 1.5rem 2rem;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
   }
+
+  .rides-card {
+    width: 100%;
+    max-width: 400px;
+  }
+
   .rides-title {
     font-size: 2.2rem;
   }
 }
 
+/* Small mobile adjustments */
 @media (max-width: 480px) {
   .rides-page-container {
     margin: 1.5rem auto;
     border-radius: 16px;
     padding: 1rem 1rem 1.5rem;
   }
+
   .rides-title {
     font-size: 1.8rem;
   }
+
   .form-input {
     font-size: 1rem;
     padding: 14px 40px 14px 44px;
   }
+
   .input-wrapper label {
     font-size: 1rem;
     left: 44px;
   }
+
   .location-icon {
     width: 18px;
     height: 18px;
-  left: 14px;
+    left: 14px;
   }
+
   .clear-btn {
     font-size: 18px;
     right: 12px;
   }
+
   .submit-btn {
     font-size: 1.2rem;
   }
