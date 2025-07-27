@@ -5,6 +5,8 @@ import "leaflet/dist/leaflet.css";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import "../fix-leaflet-icon";
+import { DateTime } from "luxon";
+ 
 
 const defaultCenter = [33.8938, 35.5018]; // Beirut
 
@@ -33,6 +35,12 @@ const Rides = () => {
   const [selectedRide, setSelectedRide] = useState(null);
   const [loadingRides, setLoadingRides] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
+
+  // Manual pickup location states
+  const [useManualPickup, setUseManualPickup] = useState(false);
+  const [startSuggestions, setStartSuggestions] = useState([]);
+  const [isStartSuggestionsVisible, setIsStartSuggestionsVisible] = useState(false);
+  const [loadingStartSuggestions, setLoadingStartSuggestions] = useState(false);
 
   // Store list of ride IDs that the user has requested
   const [requestedRides, setRequestedRides] = useState([]);
@@ -83,13 +91,17 @@ const Rides = () => {
         .replace(/\s+/g, " ")
         .trim();
 
-      setStartLocation(
-        formattedAddress ||
-          data.display_name ||
-          `${lat.toFixed(5)}, ${lon.toFixed(5)}`
-      );
+      const finalAddress = formattedAddress ||
+        data.display_name ||
+        `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+
+      setStartLocation(finalAddress);
+      return finalAddress;
     } catch (error) {
       console.error("Reverse geocode error:", error);
+      const fallbackAddress = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      setStartLocation(fallbackAddress);
+      return fallbackAddress;
     }
   };
 
@@ -129,6 +141,40 @@ const Rides = () => {
     []
   );
 
+  const fetchStartSuggestionsDebounced = React.useCallback(
+    debounce(async (query) => {
+      if (!query || query.length < 2) return;
+
+      try {
+        setLoadingStartSuggestions(true);
+
+        const url = `https://us1.locationiq.com/v1/autocomplete.php?key=${LOCATIONIQ_API_KEY}&q=${encodeURIComponent(
+          query
+        )}&countrycodes=LB&limit=5&format=json`;
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`API request failed`);
+
+        const data = await res.json();
+        const suggestions = data.map((item) => ({
+          place_id: item.place_id,
+          display_name: item.display_name,
+          lat: item.lat,
+          lon: item.lon,
+        }));
+
+        setStartSuggestions(suggestions);
+        setIsStartSuggestionsVisible(suggestions.length > 0);
+      } catch (error) {
+        setStartSuggestions([]);
+        setIsStartSuggestionsVisible(false);
+      } finally {
+        setLoadingStartSuggestions(false);
+      }
+    }, 1000),
+    []
+  );
+
   const handleEndLocationChange = (e) => {
     const value = e.target.value;
     setEndLocation(value);
@@ -143,12 +189,36 @@ const Rides = () => {
     }
   };
 
+  const handleStartLocationChange = (e) => {
+    const value = e.target.value;
+    setStartLocation(value);
+    setStartCoords(null);
+    setSelectedRide(null);
+
+    if (value.trim().length > 1) {
+      fetchStartSuggestionsDebounced(value.trim());
+    } else {
+      setStartSuggestions([]);
+      setIsStartSuggestionsVisible(false);
+    }
+  };
+
   const handleSuggestionClick = async (suggestion) => {
     setEndLocation(suggestion.display_name);
     const newEndCoords = [parseFloat(suggestion.lat), parseFloat(suggestion.lon)];
     setEndCoords(newEndCoords);
     setIsSuggestionsVisible(false);
     setErrorMsg("");
+  };
+
+  const handleStartSuggestionClick = async (suggestion) => {
+    setStartLocation(suggestion.display_name);
+    const newStartCoords = [parseFloat(suggestion.lat), parseFloat(suggestion.lon)];
+    setStartCoords(newStartCoords);
+    setCenter(newStartCoords);
+    setIsStartSuggestionsVisible(false);
+    setErrorMsg("");
+    await fetchNearbyRides(newStartCoords);
   };
 
   const handleGetCurrentLocation = () => {
@@ -159,21 +229,77 @@ const Rides = () => {
 
     setLoadingLocation(true);
 
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0
+    };
+
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
         const coords = [lat, lon];
+
+        console.log('GPS Reading:', {
+          lat: lat.toFixed(8),
+          lon: lon.toFixed(8),
+          accuracy: `${accuracy}m`
+        });
+
+        // Warn if accuracy is poor
+        if (accuracy > 100) {
+          const useAnyway = window.confirm(
+            `GPS accuracy is poor (±${accuracy.toFixed(0)}m). ` +
+            `This may result in inaccurate ride search.\n\n` +
+            `Click OK to use this location anyway, or Cancel to enter location manually.`
+          );
+          
+          if (!useAnyway) {
+            setUseManualPickup(true);
+            setLoadingLocation(false);
+            return;
+          }
+        }
+
         setStartCoords(coords);
         setCenter(coords);
         await reverseGeocode(lat, lon);
         await fetchNearbyRides(coords);
+        setUseManualPickup(false); // GPS worked, disable manual mode
         setLoadingLocation(false);
       },
       (error) => {
-        setErrorMsg("Unable to retrieve your location: " + error.message);
+        let errorMessage = "Unable to retrieve your location: ";
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage += "Location access denied by user.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage += "Location information is unavailable.";
+            break;
+          case error.TIMEOUT:
+            errorMessage += "Location request timed out.";
+            break;
+          default:
+            errorMessage += error.message;
+            break;
+        }
+        
+        const useManual = window.confirm(
+          errorMessage + "\n\nWould you like to enter your pickup location manually instead?"
+        );
+        
+        if (useManual) {
+          setUseManualPickup(true);
+        } else {
+          setErrorMsg(errorMessage);
+        }
+        
         setLoadingLocation(false);
-      }
+      },
+      options
     );
   };
 
@@ -315,10 +441,31 @@ const Rides = () => {
     setErrorMsg("");
   };
 
+  const clearStart = () => {
+    setStartLocation("");
+    setStartCoords(null);
+    setStartSuggestions([]);
+    setIsStartSuggestionsVisible(false);
+    setSelectedRide(null);
+    setNearbyRides([]);
+    setLastRefresh(null);
+    setErrorMsg("");
+  };
+
   const handleRefreshRides = () => {
     if (startCoords) {
       fetchNearbyRides(startCoords);
     }
+  };
+
+  const toggleManualPickup = () => {
+    setUseManualPickup(!useManualPickup);
+    if (!useManualPickup) {
+      // Switching to manual, clear GPS data
+      clearStart();
+    }
+    setStartSuggestions([]);
+    setIsStartSuggestionsVisible(false);
   };
 
   // Normalize requested ride IDs for comparison
@@ -346,31 +493,95 @@ const Rides = () => {
         <form className="rides-form" noValidate autoComplete="off">
           <div className="form-group">
             <label className="form-label">Pickup Location</label>
-            <div className="location-input-group">
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Click the button to detect your location"
-                value={startLocation}
-                readOnly
-                aria-label="Start Location"
-                required
-              />
+            
+            <div style={{ marginBottom: '10px' }}>
               <button
                 type="button"
-                onClick={handleGetCurrentLocation}
-                disabled={loadingLocation}
-                className="location-btn"
+                onClick={toggleManualPickup}
+                style={{
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                  backgroundColor: useManualPickup ? '#007bff' : '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer'
+                }}
               >
-                {loadingLocation ? (
-                  <span className="spinner"></span>
-                ) : (
-                  <svg className="location-icon" viewBox="0 0 24 24">
-                    <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
-                  </svg>
-                )}
+                {useManualPickup ? 'Switch to GPS' : 'Enter Manually'}
               </button>
             </div>
+
+            {!useManualPickup ? (
+              // GPS Mode
+              <div className="location-input-group">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Click the button to detect your location"
+                  value={startLocation}
+                  readOnly
+                  aria-label="Start Location"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={loadingLocation}
+                  className="location-btn"
+                  title="Get current location using GPS"
+                >
+                  {loadingLocation ? (
+                    <span className="spinner"></span>
+                  ) : (
+                    <svg className="location-icon" viewBox="0 0 24 24">
+                      <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            ) : (
+              // Manual Mode
+              <div className="suggestions-container">
+                <div className="location-input-group">
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Enter pickup location (e.g., Hamra, Beirut)"
+                    value={startLocation}
+                    onChange={handleStartLocationChange}
+                    aria-label="Start Location"
+                    required
+                  />
+                  {startLocation && (
+                    <button
+                      type="button"
+                      onClick={clearStart}
+                      className="clear-btn"
+                      aria-label="Clear start location"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+                {loadingStartSuggestions && (
+                  <div className="suggestions-loading">Searching for locations...</div>
+                )}
+                {isStartSuggestionsVisible && startSuggestions.length > 0 && (
+                  <ul className="suggestions-list">
+                    {startSuggestions.map((item) => (
+                      <li
+                        key={item.place_id}
+                        onClick={() => handleStartSuggestionClick(item)}
+                        className="suggestion-item"
+                      >
+                        {item.display_name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="form-group">
@@ -421,6 +632,12 @@ const Rides = () => {
               {errorMsg}
             </div>
           )}
+          
+          {startCoords && (
+            <div style={{ fontSize: '12px', color: '#666', margin: '10px 0' }}>
+              {nearbyRides.length} ride(s) found near your location
+            </div>
+          )}
         </form>
       </div>
 
@@ -465,13 +682,31 @@ const Rides = () => {
                 <Popup>
                   <div className="popup-content">
                     <h4>Available Ride</h4>
-                    <p><strong>Ride ID:</strong> {ride.id}</p>
                     <p><strong>Driver:</strong> {ride.driverName}</p>
                     <p><strong>From:</strong> {ride.startAddress}</p>
                     <p><strong>To:</strong> {ride.endAddress}</p>
                     <p><strong>Price:</strong> ${ride.fare}</p>
                     <p><strong>Seats:</strong> {ride.availableSeats}</p>
                     <p><strong>Departure:</strong> {rideDepartureTime.toLocaleString()}</p>
+
+                    {/* Display pickup comment if available */}
+                    {ride.pickupComment && (
+                      <div style={{ 
+                        marginTop: '10px', 
+                        padding: '8px', 
+                        backgroundColor: '#f0f8ff', 
+                        border: '1px solid #d0e7ff', 
+                        borderRadius: '4px',
+                        fontSize: '12px'
+                      }}>
+                        <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', color: '#0066cc' }}>
+                          📍 Pickup Instructions:
+                        </p>
+                        <p style={{ margin: '0', color: '#333' }}>
+                          {ride.pickupComment}
+                        </p>
+                      </div>
+                    )}
 
                     {!rideHasStarted && !isRequested && (
                       <button
