@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import "../styles/Rides.css";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { useNavigate } from "react-router-dom";
 import "../fix-leaflet-icon";
+import * as signalR from "@microsoft/signalr";
 
 const defaultCenter = [33.8938, 35.5018]; // Beirut coordinates
 
@@ -15,8 +16,82 @@ function debounce(func, delay) {
   };
 }
 
+const formatDepartureTime = (utcTimeString) => {
+  if (!utcTimeString) return "Time not specified";
+  
+  try {
+    const utcDate = new Date(utcTimeString);
+    const localDate = new Date(utcDate.getTime() + utcDate.getTimezoneOffset() * 60000);
+    
+    return localDate.toLocaleString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (e) {
+    console.error("Error formatting time:", e);
+    return utcTimeString;
+  }
+};
+
+const rideHasStarted = (departureTime) => {
+  if (!departureTime) return false;
+  
+  try {
+    const rideTime = new Date(departureTime);
+    const now = new Date();
+    return rideTime.getTime() < now.getTime();
+  } catch (e) {
+    console.error("Error checking ride status:", e);
+    return false;
+  }
+};
+
+const PhoneNumberDropdown = ({ phoneNumber }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  if (!phoneNumber) return <span>Not provided</span>;
+
+  // Clean the phone number for WhatsApp link
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+  return (
+    <div 
+      className="phone-number-container"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <span className="phone-number">{phoneNumber}</span>
+      {isHovered && (
+        <div className="phone-options-dropdown">
+          <a 
+            href={`tel:${cleanPhone}`} 
+            className="phone-option"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Call
+          </a>
+          <a 
+            href={`https://wa.me/${cleanPhone}`} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="phone-option"
+            onClick={(e) => e.stopPropagation()}
+          >
+            WhatsApp
+          </a>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Rides = () => {
   const LOCATIONIQ_API_KEY = "pk.04ae3b424787d702be2274b38a10e158";
+  const SIGNALR_HUB_URL = "https://localhost:7221/hub/rideStatus";
 
   // State management
   const [center, setCenter] = useState(defaultCenter);
@@ -37,53 +112,34 @@ const Rides = () => {
   const [startSuggestions, setStartSuggestions] = useState([]);
   const [isStartSuggestionsVisible, setIsStartSuggestionsVisible] = useState(false);
   const [loadingStartSuggestions, setLoadingStartSuggestions] = useState(false);
-  const [requestedRides, setRequestedRides] = useState([]);
+  const [requestedRides, setRequestedRides] = useState({});
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const navigate = useNavigate();
+  const connectionRef = useRef(null);
 
-  // Test user data
-  const testUser = {
-    id: 1,
-    name: "Test Passenger",
-    phone: "+96170123456",
-    email: "test@example.com"
-  };
-
-  useEffect(() => {
-    fetchUserRequestedRides();
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!startCoords) return;
-    const autoRefreshTimer = setInterval(() => {
-      fetchNearbyRides(startCoords);
-    }, 120000);
-    return () => clearInterval(autoRefreshTimer);
-  }, [startCoords]);
-
+  // Fetch user's requested rides
   const fetchUserRequestedRides = async () => {
     try {
       const res = await fetch(
-        `https://localhost:7221/api/Rides/` 
-      //  https://localhost:7221/api/rides/userrequests?passengerId=1
+        `https://localhost:7221/api/Pooling/userrequests?passengerId=6`
       );
       if (!res.ok) throw new Error("Failed to fetch your ride requests");
       const data = await res.json();
-      setRequestedRides(data);
+
+      const requestsMap = {};
+      data.forEach(request => {
+        requestsMap[request.rideId] = request.status;
+      });
+
+      setRequestedRides(requestsMap);
     } catch (err) {
       console.error(err);
-      setRequestedRides([]);
+      setRequestedRides({});
     }
   };
 
+  // Reverse geocode coordinates to address string
   const reverseGeocode = async (lat, lon) => {
     try {
       const response = await fetch(
@@ -112,6 +168,7 @@ const Rides = () => {
     }
   };
 
+  // Debounced fetch for dropoff suggestions
   const fetchDropoffSuggestionsDebounced = useCallback(
     debounce(async (query) => {
       if (!query || query.length < 2) return;
@@ -141,6 +198,7 @@ const Rides = () => {
     []
   );
 
+  // Debounced fetch for pickup suggestions
   const fetchStartSuggestionsDebounced = useCallback(
     debounce(async (query) => {
       if (!query || query.length < 2) return;
@@ -211,6 +269,7 @@ const Rides = () => {
     await fetchNearbyRides(newStartCoords);
   };
 
+  // Get current location with geolocation API
   const handleGetCurrentLocation = () => {
     if (!navigator.geolocation) {
       setErrorMsg("Geolocation is not supported by your browser.");
@@ -266,6 +325,7 @@ const Rides = () => {
     );
   };
 
+  // Fetch nearby rides
   const fetchNearbyRides = async (coords) => {
     if (!coords) return;
     try {
@@ -275,7 +335,13 @@ const Rides = () => {
       );
       if (!res.ok) throw new Error("Failed to fetch nearby rides");
       const data = await res.json();
-      setNearbyRides(data);
+      
+      const ridesWithProperTimes = data.map(ride => ({
+        ...ride,
+        departureTime: ride.departureTime
+      }));
+      
+      setNearbyRides(ridesWithProperTimes);
       setLastRefresh(new Date());
     } catch (err) {
       console.error("Nearby rides fetch error:", err);
@@ -286,93 +352,76 @@ const Rides = () => {
     }
   };
 
-  const parseDepartureTime = (departureTime) => {
-    if (!departureTime) return new Date();
-    
-    if (departureTime instanceof Date) return departureTime;
-    
-    if (typeof departureTime === 'string') {
-      if (departureTime.includes('T')) {
-        return new Date(departureTime);
+  // Request a ride
+  const handleRequestRide = async (ride) => {
+    try {
+      const requestPayload = {
+        rideId: ride.id,
+        userId: 6,
+      };
+
+      const res = await fetch("https://localhost:7221/api/Pooling/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestPayload),
+      });
+
+      if (!res.ok) {
+        const errorResponse = res.clone();
+        let errorMessage;
+        try {
+          const errorData = await errorResponse.json();
+          errorMessage = errorData.message || "Failed to request ride";
+        } catch {
+          errorMessage = await res.text();
+        }
+        throw new Error(errorMessage);
       }
-      if (departureTime.includes(' ')) {
-        return new Date(departureTime.replace(' ', 'T'));
-      }
+
+      await res.json();
+      alert("Ride requested successfully!");
+      await fetchUserRequestedRides();
+      if (startCoords) await fetchNearbyRides(startCoords);
+    } catch (error) {
+      console.error("Ride request error:", error);
+      setErrorMsg(error.message);
     }
-    
-    return new Date(departureTime);
   };
 
-  const handleRequestRide = async (ride) => {
-  try {
-    const requestPayload = {
-      rideId: ride.id,  // camelCase (check backend expectations)
-      userId: 6,        // camelCase (check backend expectations)
-      // Remove status/requestTime if backend handles them
-    };
-
-    const res = await fetch("https://localhost:7221/api/Pooling/request", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestPayload),
-    });
-
-    if (!res.ok) {
-      // Clone the response before reading it
-      const errorResponse = res.clone();
-      let errorMessage;
-      
-      try {
-        // Try parsing as JSON first
-        const errorData = await errorResponse.json();
-        errorMessage = errorData.message || "Failed to request ride";
-      } catch {
-        // Fallback to plain text if JSON parsing fails
-        errorMessage = await res.text();
-      }
-      
-      throw new Error(errorMessage);
-    }
-
-    const result = await res.json();
-    alert("Ride requested successfully!");
-    // Update UI state...
-  } catch (error) {
-    console.error("Ride request error:", error);
-    setErrorMsg(error.message);
-  }
-};
+  // Cancel ride request
   const handleCancelRide = async (ride) => {
     if (!window.confirm("Are you sure you want to cancel this ride request?")) {
       return;
     }
-
     try {
-      const cancelPayload = {
-        rideId: ride.id,
-        passengerId: 1, // Hardcoded ID
-        increaseSeats: true
-      };
-
-      const res = await fetch("https://localhost:7221/api/rides/cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cancelPayload),
-      });
+      const res = await fetch(
+        `https://localhost:7221/api/Pooling/cancel?rideId=${ride.id}&userId=6`,
+        { method: "DELETE", headers: { "Content-Type": "application/json" } }
+      );
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to cancel ride");
+        if (res.status === 404) throw new Error("Ride request not found");
+        let errorMessage;
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.message || `Failed to cancel ride (${res.status})`;
+        } catch {
+          errorMessage = `Failed to cancel ride. Server responded with status ${res.status}`;
+        }
+        throw new Error(errorMessage);
       }
 
-      const result = await res.json();
+      try {
+        await res.json();
+      } catch {}
 
       alert("Ride request cancelled successfully");
-      
-      // Update local state
-      setRequestedRides(prev => prev.filter(id => id !== ride.id));
-      
-      // Update the ride in nearbyRides to reflect increased seats
+      setRequestedRides(prevRequests => {
+        const updatedRequests = { ...prevRequests };
+        delete updatedRequests[ride.id];
+        return updatedRequests;
+      });
+      await fetchUserRequestedRides();
       setNearbyRides(prevRides => 
         prevRides.map(r => 
           r.id === ride.id 
@@ -381,26 +430,18 @@ const Rides = () => {
         )
       );
 
-      // Refresh nearby rides to get updated data from server
       setTimeout(() => {
-        fetchNearbyRides(startCoords);
+        if (startCoords) fetchNearbyRides(startCoords);
       }, 1000);
 
     } catch (error) {
       console.error("Cancel ride error:", error);
       setErrorMsg(error.message || "Failed to cancel ride. Please try again.");
+      alert(`Error: ${error.message}`);
     }
   };
 
-  const clearEnd = () => {
-    setEndLocation("");
-    setEndCoords(null);
-    setEndSuggestions([]);
-    setIsSuggestionsVisible(false);
-    setSelectedRide(null);
-    setErrorMsg("");
-  };
-
+  // Clear pickup input
   const clearStart = () => {
     setStartLocation("");
     setStartCoords(null);
@@ -412,13 +453,94 @@ const Rides = () => {
     setErrorMsg("");
   };
 
+  // Clear dropoff input
+  const clearEnd = () => {
+    setEndLocation("");
+    setEndCoords(null);
+    setEndSuggestions([]);
+    setIsSuggestionsVisible(false);
+    setSelectedRide(null);
+    setErrorMsg("");
+  };
+
   const handleRefreshRides = () => startCoords && fetchNearbyRides(startCoords);
+
   const toggleManualPickup = () => {
     setUseManualPickup(!useManualPickup);
     if (!useManualPickup) clearStart();
   };
 
-  const requestedRidesSet = new Set(requestedRides);
+  // SignalR: Connect to hub and listen for real-time ride status updates
+  useEffect(() => {
+    if (!startCoords) return;
+
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(SIGNALR_HUB_URL)
+      .withAutomaticReconnect()
+      .build();
+
+    connectionRef.current = connection;
+
+    const startConnection = async () => {
+      try {
+        await connection.start();
+        console.log("SignalR Connected");
+
+        connection.on("RideStatusUpdated", (updatedRide) => {
+          console.log("Received RideStatusUpdated:", updatedRide);
+
+          setNearbyRides(prevRides => {
+            const idx = prevRides.findIndex(r => r.id === updatedRide.id);
+            if (idx !== -1) {
+              const newRides = [...prevRides];
+              newRides[idx] = { ...newRides[idx], ...updatedRide };
+              return newRides;
+            }
+            return prevRides;
+          });
+
+          setRequestedRides(prevRequests => {
+            if (prevRequests[updatedRide.id] !== updatedRide.status) {
+              return { ...prevRequests, [updatedRide.id]: updatedRide.status };
+            }
+            return prevRequests;
+          });
+        });
+      } catch (err) {
+        console.error("SignalR Connection Error:", err);
+      }
+    };
+
+    startConnection();
+
+    return () => {
+      if (connection) {
+        connection.stop().then(() => console.log("SignalR Disconnected"));
+      }
+    };
+  }, [startCoords]);
+
+  // Auto-refresh nearby rides fallback
+  useEffect(() => {
+    if (!startCoords) return;
+    const interval = setInterval(() => {
+      fetchNearbyRides(startCoords);
+    }, 120000);
+    return () => clearInterval(interval);
+  }, [startCoords]);
+
+  // Refresh user requests on mount
+  useEffect(() => {
+    fetchUserRequestedRides();
+  }, []);
+
+  // Update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div className="rides-page-container">
@@ -442,7 +564,6 @@ const Rides = () => {
         <form className="rides-form" noValidate autoComplete="off">
           <div className="form-group">
             <label className="form-label">Pickup Location</label>
-            
             <div style={{ marginBottom: '10px' }}>
               <button
                 type="button"
@@ -468,47 +589,35 @@ const Rides = () => {
                   type="button"
                   onClick={handleGetCurrentLocation}
                   disabled={loadingLocation}
-                  className="location-btn"
+                  className={`location-btn ${loadingLocation ? 'loading' : ''}`}
                   title="Get current location using GPS"
                 >
                   {loadingLocation ? (
                     <span className="spinner"></span>
                   ) : (
-                    <svg className="location-icon" viewBox="0 0 24 24">
-                      <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
-                    </svg>
+                    <>
+                      <svg className="location-icon" viewBox="0 0 24 24">
+                        <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0-6c-1.1 0-2 .9-2 2v2.07A7.998 7.998 0 0 0 4.07 10H2c-1.1 0-2 .9-2 2v0c0 1.1.9 2 2 2h2.07a7.998 7.998 0 0 0 5.93 5.93V20c0 1.1.9 2 2 2v0c1.1 0 2-.9 2-2v-2.07a7.998 7.998 0 0 0 5.93-5.93H22c1.1 0 2-.9 2-2v0c0-1.1-.9-2-2-2h-2.07a7.998 7.998 0 0 0-5.93-5.93V4c0-1.1-.9-2-2-2z"></path>
+                      </svg>
+                      <span className="btn-text">Get Location</span>
+                    </>
                   )}
                 </button>
               </div>
             ) : (
-              <div className="suggestions-container">
-                <div className="location-input-group">
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Enter pickup location (e.g., Hamra, Beirut)"
-                    value={startLocation}
-                    onChange={handleStartLocationChange}
-                    aria-label="Start Location"
-                    required
-                  />
-                  {startLocation && (
-                    <button
-                      type="button"
-                      onClick={clearStart}
-                      className="clear-btn"
-                      aria-label="Clear start location"
-                    >
-                      &times;
-                    </button>
-                  )}
-                </div>
-                {loadingStartSuggestions && (
-                  <div className="suggestions-loading">Searching for locations...</div>
-                )}
+              <div>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Enter pickup location manually"
+                  value={startLocation}
+                  onChange={handleStartLocationChange}
+                  aria-label="Start Location"
+                  required
+                />
                 {isStartSuggestionsVisible && startSuggestions.length > 0 && (
                   <ul className="suggestions-list">
-                    {startSuggestions.map((item) => (
+                    {startSuggestions.map(item => (
                       <li
                         key={item.place_id}
                         onClick={() => handleStartSuggestionClick(item)}
@@ -520,6 +629,16 @@ const Rides = () => {
                   </ul>
                 )}
               </div>
+            )}
+            {startLocation && useManualPickup && (
+              <button
+                type="button"
+                onClick={clearStart}
+                className="clear-btn"
+                aria-label="Clear start location"
+              >
+                &times;
+              </button>
             )}
           </div>
 
@@ -571,7 +690,7 @@ const Rides = () => {
               {errorMsg}
             </div>
           )}
-          
+
           {startCoords && (
             <div className="rides-found-info">
               {nearbyRides.length} ride(s) found near your location
@@ -607,9 +726,9 @@ const Rides = () => {
           )}
 
           {nearbyRides.map((ride) => {
-            const rideDepartureTime = parseDepartureTime(ride.departureTime);
-            const rideHasStarted = rideDepartureTime.getTime() < currentTime.getTime();
-            const isRequested = requestedRidesSet.has(ride.id);
+            const formattedTime = formatDepartureTime(ride.departureTime);
+            const hasStarted = rideHasStarted(ride.departureTime);
+            const requestStatus = requestedRides[ride.id];
 
             return (
               <Marker
@@ -621,14 +740,14 @@ const Rides = () => {
                   <div className="popup-content">
                     <h4>Available Ride</h4>
                     <p><strong>Driver:</strong> {ride.driverName}</p>
-                    <p><strong>Phone:</strong> {ride.driverPhone || "Not provided"}</p>
+                    <p><strong>Phone:</strong> <PhoneNumberDropdown phoneNumber={ride.driverPhone} /></p>
                     <p><strong>Car Model:</strong> {ride.carModel || "Not specified"}</p>
                     <p><strong>Car Plate:</strong> {ride.carPlate || "Not specified"}</p>
                     <p><strong>From:</strong> {ride.startAddress}</p>
                     <p><strong>To:</strong> {ride.endAddress}</p>
                     <p><strong>Price:</strong> ${ride.fare}</p>
                     <p><strong>Seats:</strong> {ride.availableSeats}</p>
-                    <p><strong>Departure:</strong> {rideDepartureTime.toLocaleString()}</p>
+                    <p><strong>Departure:</strong> {formattedTime}</p>
 
                     {ride.pickupComment && (
                       <div className="pickup-comment">
@@ -637,27 +756,26 @@ const Rides = () => {
                       </div>
                     )}
 
-                    {!rideHasStarted && !isRequested && (
-                      <button
-                        onClick={() => handleRequestRide(ride)}
-                        className="request-btn"
-                      >
-                        Request Ride
-                      </button>
-                    )}
-
-                    {!rideHasStarted && isRequested && (
-                      <button
-                        onClick={() => handleCancelRide(ride)}
-                        className="cancel-btn"
-                      >
-                        Cancel Request
-                      </button>
-                    )}
-
-                    {rideHasStarted && (
+                    {!hasStarted ? (
+                      <div className="popup-buttons">
+                        <button
+                          onClick={() => handleRequestRide(ride)}
+                          className="request-btn"
+                          disabled={requestStatus === "Pending" || ride.availableSeats <= 0}
+                        >
+                          {requestStatus === "Pending" ? "Request Pending" : "Request Ride"}
+                        </button>
+                        <button
+                          onClick={() => handleCancelRide(ride)}
+                          className="cancel-btn"
+                          disabled={!requestStatus || requestStatus !== "Pending"}
+                        >
+                          Cancel Request
+                        </button>
+                      </div>
+                    ) : (
                       <button className="request-btn" disabled>
-                        Not Available
+                        Ride Started
                       </button>
                     )}
                   </div>

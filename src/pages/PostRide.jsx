@@ -390,8 +390,10 @@ export default function PostRide() {
 
     // Convert the local datetime to ISO string without timezone adjustment
     const localDateTime = new Date(rideData.StartTime);
-    const timezoneOffset = localDateTime.getTimezoneOffset() * 60000; // offset in milliseconds
-    const localISOTime = new Date(localDateTime.getTime() - timezoneOffset).toISOString().slice(0, 16);
+    // Format as ISO string but keep the local time values
+    const isoStringWithoutTimezone = new Date(
+      localDateTime.getTime() - localDateTime.getTimezoneOffset() * 60000
+    ).toISOString().slice(0, 16);
 
     const newRide = {
       UserId: 1,
@@ -403,7 +405,7 @@ export default function PostRide() {
       EndLon: parseFloat(rideData.EndLon),
       Fare: fareValue,
       AvailableSeats: seatsNumber,
-      StartTime: localISOTime, // Send as local time in ISO format without timezone
+      StartTime: isoStringWithoutTimezone,
       PickupComment: useManualPickup ? rideData.PickupComment.trim() : null
     };
 
