@@ -286,6 +286,30 @@
   color: #4b5563;
 }
 
+
+.status-badge {
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-right: 8px;
+  display: inline-block;
+}
+
+.status-badge.pending {
+  background-color: #f0ad4e;
+  color: #fff;
+}
+
+.status-badge.accepted {
+  background-color: #5cb85c;
+  color: #fff;
+}
+
+.status-badge.rejected {
+  background-color: #d9534f;
+  color: #fff;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

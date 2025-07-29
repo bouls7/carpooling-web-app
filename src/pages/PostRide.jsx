@@ -25,7 +25,7 @@ export default function PostRide() {
     Fare: "",
     AvailableSeats: "",
     StartTime: "",
-    PickupComment: "", // New field for driver comment
+    PickupComment: "",
   });
 
   const [errors, setErrors] = useState({});
@@ -192,7 +192,6 @@ export default function PostRide() {
           accuracy: `${accuracy}m`
         });
 
-        // Warn if accuracy is poor
         if (accuracy > 100) {
           const useAnyway = window.confirm(
             `GPS accuracy is poor (±${accuracy.toFixed(0)}m). ` +
@@ -233,7 +232,7 @@ export default function PostRide() {
             StartAddress: finalAddress,
             StartLat: lat,
             StartLon: lon,
-            PickupComment: "", // Clear comment when using GPS
+            PickupComment: "",
           }));
 
           setErrors((prev) => ({
@@ -243,8 +242,7 @@ export default function PostRide() {
             StartLon: null,
           }));
 
-          setUseManualPickup(false); // GPS worked, disable manual mode
-
+          setUseManualPickup(false);
         } catch (error) {
           alert("Could not fetch address: " + error.message);
         } finally {
@@ -319,16 +317,14 @@ export default function PostRide() {
   const toggleManualPickup = () => {
     setUseManualPickup(!useManualPickup);
     if (!useManualPickup) {
-      // Switching to manual, clear GPS data
       setRideData((prev) => ({
         ...prev,
         StartAddress: "",
         StartLat: "",
         StartLon: "",
-        PickupComment: "", // Clear comment when switching modes
+        PickupComment: "",
       }));
     } else {
-      // Switching to GPS, clear comment
       setRideData((prev) => ({
         ...prev,
         PickupComment: "",
@@ -383,7 +379,6 @@ export default function PostRide() {
 
     if (!rideData.StartTime) newErrors.StartTime = "Start time is required.";
 
-    // Validate pickup comment when using manual pickup
     if (useManualPickup && !rideData.PickupComment.trim()) {
       newErrors.PickupComment = "Please provide pickup instructions when entering location manually.";
     }
@@ -392,6 +387,11 @@ export default function PostRide() {
       setErrors(newErrors);
       return;
     }
+
+    // Convert the local datetime to ISO string without timezone adjustment
+    const localDateTime = new Date(rideData.StartTime);
+    const timezoneOffset = localDateTime.getTimezoneOffset() * 60000; // offset in milliseconds
+    const localISOTime = new Date(localDateTime.getTime() - timezoneOffset).toISOString().slice(0, 16);
 
     const newRide = {
       UserId: 1,
@@ -403,8 +403,8 @@ export default function PostRide() {
       EndLon: parseFloat(rideData.EndLon),
       Fare: fareValue,
       AvailableSeats: seatsNumber,
-      StartTime: new Date(rideData.StartTime).toISOString(),
-      PickupComment: useManualPickup ? rideData.PickupComment.trim() : null // Only include comment if manual pickup
+      StartTime: localISOTime, // Send as local time in ISO format without timezone
+      PickupComment: useManualPickup ? rideData.PickupComment.trim() : null
     };
 
     try {
@@ -473,7 +473,6 @@ export default function PostRide() {
         </div>
 
         {!useManualPickup ? (
-          // GPS Mode
           <>
             <input
               type="text"
@@ -497,7 +496,6 @@ export default function PostRide() {
             </button>
           </>
         ) : (
-          // Manual Mode
           <>
             <div className="suggestions-container" ref={pickupSuggestionRef}>
               <input
@@ -531,7 +529,6 @@ export default function PostRide() {
               )}
             </div>
 
-            {/* Pickup Comment Field - Only shown in manual mode */}
             <label style={{ marginTop: '15px' }}>Pickup Instructions</label>
             <textarea
               name="PickupComment"

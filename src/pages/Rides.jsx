@@ -1,14 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import "../styles/Rides.css";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import "../fix-leaflet-icon";
-import { DateTime } from "luxon";
- 
 
-const defaultCenter = [33.8938, 35.5018]; // Beirut
+const defaultCenter = [33.8938, 35.5018]; // Beirut coordinates
 
 function debounce(func, delay) {
   let timer;
@@ -21,6 +18,7 @@ function debounce(func, delay) {
 const Rides = () => {
   const LOCATIONIQ_API_KEY = "pk.04ae3b424787d702be2274b38a10e158";
 
+  // State management
   const [center, setCenter] = useState(defaultCenter);
   const [startLocation, setStartLocation] = useState("");
   const [endLocation, setEndLocation] = useState("");
@@ -35,39 +33,51 @@ const Rides = () => {
   const [selectedRide, setSelectedRide] = useState(null);
   const [loadingRides, setLoadingRides] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
-
-  // Manual pickup location states
   const [useManualPickup, setUseManualPickup] = useState(false);
   const [startSuggestions, setStartSuggestions] = useState([]);
   const [isStartSuggestionsVisible, setIsStartSuggestionsVisible] = useState(false);
   const [loadingStartSuggestions, setLoadingStartSuggestions] = useState(false);
-
-  // Store list of ride IDs that the user has requested
   const [requestedRides, setRequestedRides] = useState([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  const { activeAccount, addRideHistory } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!activeAccount) {
-      navigate("/signup");
-      return;
-    }
-    fetchUserRequestedRides();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAccount]);
+  // Test user data
+  const testUser = {
+    id: 1,
+    name: "Test Passenger",
+    phone: "+96170123456",
+    email: "test@example.com"
+  };
 
-  // Fetch rides the user already requested from backend
+  useEffect(() => {
+    fetchUserRequestedRides();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!startCoords) return;
+    const autoRefreshTimer = setInterval(() => {
+      fetchNearbyRides(startCoords);
+    }, 120000);
+    return () => clearInterval(autoRefreshTimer);
+  }, [startCoords]);
+
   const fetchUserRequestedRides = async () => {
     try {
       const res = await fetch(
-        `https://localhost:7221/api/rides/userrequests?passengerId=${activeAccount.id}`
+        `https://localhost:7221/api/Rides/` 
+      //  https://localhost:7221/api/rides/userrequests?passengerId=1
       );
       if (!res.ok) throw new Error("Failed to fetch your ride requests");
-
       const data = await res.json();
-      const rideIds = data.map((ride) => (typeof ride === "object" ? ride.id : ride));
-      setRequestedRides(rideIds);
+      setRequestedRides(data);
     } catch (err) {
       console.error(err);
       setRequestedRides([]);
@@ -83,18 +93,15 @@ const Rides = () => {
 
       const data = await response.json();
       const addressParts = data.address || {};
-      const formattedAddress = `${addressParts.road || ""} ${
-        addressParts.neighbourhood || ""
-      }, ${addressParts.city || addressParts.town || addressParts.village || ""}, ${
-        addressParts.state || ""
-      }, ${addressParts.country || ""}`
-        .replace(/\s+/g, " ")
-        .trim();
+      const formattedAddress = [
+        addressParts.road,
+        addressParts.neighbourhood,
+        addressParts.city || addressParts.town || addressParts.village,
+        addressParts.state,
+        addressParts.country
+      ].filter(Boolean).join(", ");
 
-      const finalAddress = formattedAddress ||
-        data.display_name ||
-        `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-
+      const finalAddress = formattedAddress || data.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
       setStartLocation(finalAddress);
       return finalAddress;
     } catch (error) {
@@ -105,64 +112,50 @@ const Rides = () => {
     }
   };
 
-  const fetchDropoffSuggestionsDebounced = React.useCallback(
+  const fetchDropoffSuggestionsDebounced = useCallback(
     debounce(async (query) => {
       if (!query || query.length < 2) return;
-
       try {
         setLoadingSuggestions(true);
         setErrorMsg("");
-
-        const url = `https://us1.locationiq.com/v1/autocomplete.php?key=${LOCATIONIQ_API_KEY}&q=${encodeURIComponent(
-          query
-        )}&countrycodes=LB&limit=5&format=json`;
-
+        const url = `https://us1.locationiq.com/v1/autocomplete.php?key=${LOCATIONIQ_API_KEY}&q=${encodeURIComponent(query)}&countrycodes=LB&limit=5&format=json`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`API request failed`);
-
         const data = await res.json();
-        const suggestions = data.map((item) => ({
+        const suggestions = data.map(item => ({
           place_id: item.place_id,
           display_name: item.display_name,
           lat: item.lat,
           lon: item.lon,
         }));
-
         setEndSuggestions(suggestions);
         setIsSuggestionsVisible(suggestions.length > 0);
       } catch (error) {
-        setErrorMsg("Could not load location suggestions. Please wait a few seconds.");
+        setErrorMsg("Could not load location suggestions. Please try again.");
         setEndSuggestions([]);
         setIsSuggestionsVisible(false);
       } finally {
         setLoadingSuggestions(false);
       }
-    }, 1000),
+    }, 500),
     []
   );
 
-  const fetchStartSuggestionsDebounced = React.useCallback(
+  const fetchStartSuggestionsDebounced = useCallback(
     debounce(async (query) => {
       if (!query || query.length < 2) return;
-
       try {
         setLoadingStartSuggestions(true);
-
-        const url = `https://us1.locationiq.com/v1/autocomplete.php?key=${LOCATIONIQ_API_KEY}&q=${encodeURIComponent(
-          query
-        )}&countrycodes=LB&limit=5&format=json`;
-
+        const url = `https://us1.locationiq.com/v1/autocomplete.php?key=${LOCATIONIQ_API_KEY}&q=${encodeURIComponent(query)}&countrycodes=LB&limit=5&format=json`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`API request failed`);
-
         const data = await res.json();
-        const suggestions = data.map((item) => ({
+        const suggestions = data.map(item => ({
           place_id: item.place_id,
           display_name: item.display_name,
           lat: item.lat,
           lon: item.lon,
         }));
-
         setStartSuggestions(suggestions);
         setIsStartSuggestionsVisible(suggestions.length > 0);
       } catch (error) {
@@ -171,7 +164,7 @@ const Rides = () => {
       } finally {
         setLoadingStartSuggestions(false);
       }
-    }, 1000),
+    }, 500),
     []
   );
 
@@ -180,7 +173,6 @@ const Rides = () => {
     setEndLocation(value);
     setEndCoords(null);
     setSelectedRide(null);
-
     if (value.trim().length > 1) {
       fetchDropoffSuggestionsDebounced(value.trim());
     } else {
@@ -194,7 +186,6 @@ const Rides = () => {
     setStartLocation(value);
     setStartCoords(null);
     setSelectedRide(null);
-
     if (value.trim().length > 1) {
       fetchStartSuggestionsDebounced(value.trim());
     } else {
@@ -203,10 +194,9 @@ const Rides = () => {
     }
   };
 
-  const handleSuggestionClick = async (suggestion) => {
+  const handleSuggestionClick = (suggestion) => {
     setEndLocation(suggestion.display_name);
-    const newEndCoords = [parseFloat(suggestion.lat), parseFloat(suggestion.lon)];
-    setEndCoords(newEndCoords);
+    setEndCoords([parseFloat(suggestion.lat), parseFloat(suggestion.lon)]);
     setIsSuggestionsVisible(false);
     setErrorMsg("");
   };
@@ -228,34 +218,21 @@ const Rides = () => {
     }
 
     setLoadingLocation(true);
-
     const options = {
       enableHighAccuracy: true,
-      timeout: 20000,
-      maximumAge: 0
+      timeout: 15000,
+      maximumAge: 30000
     };
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-        const accuracy = position.coords.accuracy;
+        const { latitude: lat, longitude: lon, accuracy } = position.coords;
         const coords = [lat, lon];
 
-        console.log('GPS Reading:', {
-          lat: lat.toFixed(8),
-          lon: lon.toFixed(8),
-          accuracy: `${accuracy}m`
-        });
-
-        // Warn if accuracy is poor
         if (accuracy > 100) {
           const useAnyway = window.confirm(
-            `GPS accuracy is poor (±${accuracy.toFixed(0)}m). ` +
-            `This may result in inaccurate ride search.\n\n` +
-            `Click OK to use this location anyway, or Cancel to enter location manually.`
+            `GPS accuracy is poor (±${accuracy.toFixed(0)}m). Continue anyway?`
           );
-          
           if (!useAnyway) {
             setUseManualPickup(true);
             setLoadingLocation(false);
@@ -267,36 +244,22 @@ const Rides = () => {
         setCenter(coords);
         await reverseGeocode(lat, lon);
         await fetchNearbyRides(coords);
-        setUseManualPickup(false); // GPS worked, disable manual mode
+        setUseManualPickup(false);
         setLoadingLocation(false);
       },
       (error) => {
-        let errorMessage = "Unable to retrieve your location: ";
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage += "Location access denied by user.";
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage += "Location information is unavailable.";
-            break;
-          case error.TIMEOUT:
-            errorMessage += "Location request timed out.";
-            break;
-          default:
-            errorMessage += error.message;
-            break;
-        }
+        const errorMessages = {
+          [error.PERMISSION_DENIED]: "Location access denied by user.",
+          [error.POSITION_UNAVAILABLE]: "Location information unavailable.",
+          [error.TIMEOUT]: "Location request timed out."
+        };
+        const errorMessage = `Unable to retrieve location: ${errorMessages[error.code] || error.message}`;
         
-        const useManual = window.confirm(
-          errorMessage + "\n\nWould you like to enter your pickup location manually instead?"
-        );
-        
-        if (useManual) {
+        if (window.confirm(`${errorMessage} Enter location manually?`)) {
           setUseManualPickup(true);
         } else {
           setErrorMsg(errorMessage);
         }
-        
         setLoadingLocation(false);
       },
       options
@@ -305,14 +268,12 @@ const Rides = () => {
 
   const fetchNearbyRides = async (coords) => {
     if (!coords) return;
-
     try {
       setLoadingRides(true);
       const res = await fetch(
         `https://localhost:7221/api/rides?nearLat=${coords[0]}&nearLon=${coords[1]}&radius=5`
       );
       if (!res.ok) throw new Error("Failed to fetch nearby rides");
-
       const data = await res.json();
       setNearbyRides(data);
       setLastRefresh(new Date());
@@ -325,93 +286,78 @@ const Rides = () => {
     }
   };
 
-  // Helper to parse departureTime as UTC date safely
-  const parseDepartureTimeUTC = (departureTime) => {
-    const parts = departureTime.split(/[- :T]/);
-    return new Date(
-      Date.UTC(
-        parseInt(parts[0]),
-        parseInt(parts[1], 10) - 1,
-        parseInt(parts[2], 10),
-        parseInt(parts[3] || "0", 10),
-        parseInt(parts[4] || "0", 10),
-        parseInt(parts[5] || "0", 10)
-      )
-    );
+  const parseDepartureTime = (departureTime) => {
+    if (!departureTime) return new Date();
+    
+    if (departureTime instanceof Date) return departureTime;
+    
+    if (typeof departureTime === 'string') {
+      if (departureTime.includes('T')) {
+        return new Date(departureTime);
+      }
+      if (departureTime.includes(' ')) {
+        return new Date(departureTime.replace(' ', 'T'));
+      }
+    }
+    
+    return new Date(departureTime);
   };
 
-  // Request a ride by POSTing to the backend
   const handleRequestRide = async (ride) => {
-    if (!activeAccount) {
-      navigate("/signup");
-      return;
-    }
+  try {
+    const requestPayload = {
+      rideId: ride.id,  // camelCase (check backend expectations)
+      userId: 6,        // camelCase (check backend expectations)
+      // Remove status/requestTime if backend handles them
+    };
 
-    const rideDepartureTime = parseDepartureTimeUTC(ride.departureTime);
-    const now = new Date();
+    const res = await fetch("https://localhost:7221/api/Pooling/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestPayload),
+    });
 
-    if (rideDepartureTime.getTime() < now.getTime()) {
-      setErrorMsg("This ride has already started and is no longer available");
-      return;
-    }
-
-    try {
-      setErrorMsg("");
-      setSelectedRide(ride);
-
-      const res = await fetch("https://localhost:7221/api/rides/request", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          rideId: ride.id,
-          passengerId: activeAccount.id,
-          startLocation,
-          endLocation,
-          startCoords,
-          endCoords,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to request ride");
+    if (!res.ok) {
+      // Clone the response before reading it
+      const errorResponse = res.clone();
+      let errorMessage;
+      
+      try {
+        // Try parsing as JSON first
+        const errorData = await errorResponse.json();
+        errorMessage = errorData.message || "Failed to request ride";
+      } catch {
+        // Fallback to plain text if JSON parsing fails
+        errorMessage = await res.text();
       }
-
-      const result = await res.json();
-      alert(`Ride requested successfully! Driver contact: ${ride.driverPhone}`);
-
-      addRideHistory(result.ride);
-
-      // Add this ride ID to requestedRides to show cancel button
-      setRequestedRides((prev) => [...prev, ride.id]);
-
-      if (startCoords) {
-        fetchNearbyRides(startCoords);
-      }
-    } catch (error) {
-      setErrorMsg(error.message);
+      
+      throw new Error(errorMessage);
     }
-  };
 
-  // Cancel ride request by POST to backend (adjust if your backend supports DELETE)
+    const result = await res.json();
+    alert("Ride requested successfully!");
+    // Update UI state...
+  } catch (error) {
+    console.error("Ride request error:", error);
+    setErrorMsg(error.message);
+  }
+};
   const handleCancelRide = async (ride) => {
-    if (!activeAccount) {
-      navigate("/signup");
+    if (!window.confirm("Are you sure you want to cancel this ride request?")) {
       return;
     }
 
     try {
+      const cancelPayload = {
+        rideId: ride.id,
+        passengerId: 1, // Hardcoded ID
+        increaseSeats: true
+      };
+
       const res = await fetch("https://localhost:7221/api/rides/cancel", {
-        method: "POST", // Use DELETE if supported
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          rideId: ride.id,
-          passengerId: activeAccount.id,
-        }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cancelPayload),
       });
 
       if (!res.ok) {
@@ -419,16 +365,30 @@ const Rides = () => {
         throw new Error(errorData.message || "Failed to cancel ride");
       }
 
-      alert("Ride request cancelled.");
+      const result = await res.json();
 
-      // Remove ride ID from requestedRides
-      setRequestedRides((prev) => prev.filter((id) => id !== ride.id));
+      alert("Ride request cancelled successfully");
+      
+      // Update local state
+      setRequestedRides(prev => prev.filter(id => id !== ride.id));
+      
+      // Update the ride in nearbyRides to reflect increased seats
+      setNearbyRides(prevRides => 
+        prevRides.map(r => 
+          r.id === ride.id 
+            ? { ...r, availableSeats: r.availableSeats + 1 }
+            : r
+        )
+      );
 
-      if (startCoords) {
+      // Refresh nearby rides to get updated data from server
+      setTimeout(() => {
         fetchNearbyRides(startCoords);
-      }
+      }, 1000);
+
     } catch (error) {
-      setErrorMsg(error.message);
+      console.error("Cancel ride error:", error);
+      setErrorMsg(error.message || "Failed to cancel ride. Please try again.");
     }
   };
 
@@ -452,24 +412,13 @@ const Rides = () => {
     setErrorMsg("");
   };
 
-  const handleRefreshRides = () => {
-    if (startCoords) {
-      fetchNearbyRides(startCoords);
-    }
-  };
-
+  const handleRefreshRides = () => startCoords && fetchNearbyRides(startCoords);
   const toggleManualPickup = () => {
     setUseManualPickup(!useManualPickup);
-    if (!useManualPickup) {
-      // Switching to manual, clear GPS data
-      clearStart();
-    }
-    setStartSuggestions([]);
-    setIsStartSuggestionsVisible(false);
+    if (!useManualPickup) clearStart();
   };
 
-  // Normalize requested ride IDs for comparison
-  const requestedRidesSet = new Set(requestedRides.map(String));
+  const requestedRidesSet = new Set(requestedRides);
 
   return (
     <div className="rides-page-container">
@@ -498,22 +447,13 @@ const Rides = () => {
               <button
                 type="button"
                 onClick={toggleManualPickup}
-                style={{
-                  padding: '5px 10px',
-                  fontSize: '12px',
-                  backgroundColor: useManualPickup ? '#007bff' : '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: 'pointer'
-                }}
+                className={`toggle-mode-btn ${useManualPickup ? 'manual' : 'gps'}`}
               >
                 {useManualPickup ? 'Switch to GPS' : 'Enter Manually'}
               </button>
             </div>
 
             {!useManualPickup ? (
-              // GPS Mode
               <div className="location-input-group">
                 <input
                   type="text"
@@ -541,7 +481,6 @@ const Rides = () => {
                 </button>
               </div>
             ) : (
-              // Manual Mode
               <div className="suggestions-container">
                 <div className="location-input-group">
                   <input
@@ -634,8 +573,11 @@ const Rides = () => {
           )}
           
           {startCoords && (
-            <div style={{ fontSize: '12px', color: '#666', margin: '10px 0' }}>
+            <div className="rides-found-info">
               {nearbyRides.length} ride(s) found near your location
+              {nearbyRides.length > 0 && (
+                <span className="auto-refresh-info">• Auto-refreshing every 2 minutes</span>
+              )}
             </div>
           )}
         </form>
@@ -665,46 +607,33 @@ const Rides = () => {
           )}
 
           {nearbyRides.map((ride) => {
-            const rideDepartureTime = parseDepartureTimeUTC(ride.departureTime);
-            const now = new Date();
-            const rideHasStarted = rideDepartureTime.getTime() < now.getTime();
-
-            const isRequested = requestedRidesSet.has(String(ride.id));
+            const rideDepartureTime = parseDepartureTime(ride.departureTime);
+            const rideHasStarted = rideDepartureTime.getTime() < currentTime.getTime();
+            const isRequested = requestedRidesSet.has(ride.id);
 
             return (
               <Marker
                 key={ride.id}
                 position={[ride.startLat, ride.startLon]}
-                eventHandlers={{
-                  click: () => setSelectedRide(ride),
-                }}
+                eventHandlers={{ click: () => setSelectedRide(ride) }}
               >
                 <Popup>
                   <div className="popup-content">
                     <h4>Available Ride</h4>
                     <p><strong>Driver:</strong> {ride.driverName}</p>
+                    <p><strong>Phone:</strong> {ride.driverPhone || "Not provided"}</p>
+                    <p><strong>Car Model:</strong> {ride.carModel || "Not specified"}</p>
+                    <p><strong>Car Plate:</strong> {ride.carPlate || "Not specified"}</p>
                     <p><strong>From:</strong> {ride.startAddress}</p>
                     <p><strong>To:</strong> {ride.endAddress}</p>
                     <p><strong>Price:</strong> ${ride.fare}</p>
                     <p><strong>Seats:</strong> {ride.availableSeats}</p>
                     <p><strong>Departure:</strong> {rideDepartureTime.toLocaleString()}</p>
 
-                    {/* Display pickup comment if available */}
                     {ride.pickupComment && (
-                      <div style={{ 
-                        marginTop: '10px', 
-                        padding: '8px', 
-                        backgroundColor: '#f0f8ff', 
-                        border: '1px solid #d0e7ff', 
-                        borderRadius: '4px',
-                        fontSize: '12px'
-                      }}>
-                        <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', color: '#0066cc' }}>
-                          📍 Pickup Instructions:
-                        </p>
-                        <p style={{ margin: '0', color: '#333' }}>
-                          {ride.pickupComment}
-                        </p>
+                      <div className="pickup-comment">
+                        <p className="pickup-comment-title">📍 Pickup Instructions:</p>
+                        <p className="pickup-comment-text">{ride.pickupComment}</p>
                       </div>
                     )}
 
@@ -721,7 +650,6 @@ const Rides = () => {
                       <button
                         onClick={() => handleCancelRide(ride)}
                         className="cancel-btn"
-                        style={{ backgroundColor: "#f44336", color: "#fff" }}
                       >
                         Cancel Request
                       </button>

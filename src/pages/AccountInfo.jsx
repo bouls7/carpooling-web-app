@@ -46,11 +46,20 @@ export default function AccountInfo() {
       <div className="account-detail">
         <strong>Role:</strong> {account.role}
       </div>
+      <div className="account-detail">
+        <strong>Phone Number:</strong> {account.phoneNumber || "N/A"}
+      </div>
 
       {account.role === "driver" && (
         <>
           <div className="account-detail">
             <strong>License Number:</strong> {account.licenseNumber || "N/A"}
+          </div>
+          <div className="account-detail">
+            <strong>Car Plate:</strong> {account.carPlate || "N/A"}
+          </div>
+          <div className="account-detail">
+            <strong>Car Model:</strong> {account.carModel || "N/A"}
           </div>
           {account.idScan && (
             <div className="account-detail">
