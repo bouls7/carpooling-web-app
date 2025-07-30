@@ -1,3 +1,108 @@
+/* Driver Notification Modal Styles */
+.driver-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.driver-modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+  padding: 32px 28px 24px 28px;
+  min-width: 340px;
+  max-width: 95vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  animation: fadeIn 0.2s;
+}
+
+.driver-modal h3 {
+  margin-top: 0;
+  margin-bottom: 18px;
+  font-size: 1.3rem;
+  color: #2d3a4a;
+  text-align: center;
+}
+
+.driver-requests-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px 0;
+}
+
+.driver-request-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eaeaea;
+  font-size: 1rem;
+}
+
+.driver-request-item:last-child {
+  border-bottom: none;
+}
+
+.accept-btn, .reject-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 5px;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-left: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.accept-btn {
+  background: #2ecc40;
+  color: #fff;
+}
+.accept-btn:disabled {
+  background: #b7eac7;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.reject-btn {
+  background: #ff4136;
+  color: #fff;
+}
+.reject-btn:disabled {
+  background: #f7b7b7;
+  color: #fff;
+  cursor: not-allowed;
+}
+
+.close-modal-btn {
+  display: block;
+  margin: 18px auto 0 auto;
+  padding: 7px 22px;
+  background: #2d3a4a;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.close-modal-btn:hover {
+  background: #1a222b;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 :root {
   --primary-color: #2563eb;
   --primary-hover: #1e40af;
@@ -75,7 +180,7 @@
 }
 
 .input-wrapper {
-  position: relative;
+  position: static;
   width: 100%;
   border-radius: var(--border-radius);
   background: var(--input-bg);
@@ -112,6 +217,11 @@
   min-width: 0;
 }
 
+.form-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
 .form-input::placeholder {
   color: var(--placeholder-color);
   font-weight: 500;
@@ -123,6 +233,57 @@
 .form-input:not(:placeholder-shown)::placeholder {
   opacity: 0;
   pointer-events: none;
+}
+
+/* Suggestions styles */
+.suggestions-container {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.suggestions-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e5e7eb;
+  border-top: none;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  display: block;
+  visibility: visible;
+  opacity: 1;
+}
+
+.suggestion-item {
+  padding: 10px 15px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s;
+  font-size: 0.95rem;
+  color: var(--text-color);
+}
+
+.suggestion-item:hover {
+  background-color: #f5f5f5;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestions-loading {
+  padding: 10px 15px;
+  color: #6b7280;
+  font-size: 0.9rem;
+  background: white;
 }
 
 /* Location Button Styles */
@@ -253,6 +414,8 @@
     8px 8px 25px rgba(0, 0, 0, 0.12),
     -8px -8px 25px rgba(255, 255, 255, 0.7);
   border: 2px solid var(--primary-color);
+  position: relative;
+  z-index: 1;
 }
 
 .popup-content {
@@ -354,43 +517,6 @@
 button:disabled {
   opacity: 0.65;
   cursor: not-allowed;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Suggestions styles */
-.suggestions-list {
-  position: absolute;
-  width: 100%;
-  max-height: 200px;
-  overflow-y: auto;
-  background: white;
-  border-radius: 0 0 var(--border-radius) var(--border-radius);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  z-index: 100;
-  margin-top: -10px;
-  border: 1px solid #e5e7eb;
-  border-top: none;
-}
-
-.suggestion-item {
-  padding: 10px 15px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.suggestion-item:hover {
-  background-color: #f3f4f6;
-}
-
-.suggestions-loading {
-  padding: 10px 15px;
-  color: #6b7280;
-  font-size: 0.9rem;
 }
 
 /* Phone number dropdown styles */
@@ -498,5 +624,11 @@ button:disabled {
 
   .submit-btn {
     font-size: 1.2rem;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }

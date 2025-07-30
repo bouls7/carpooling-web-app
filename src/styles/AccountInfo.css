@@ -1,19 +1,20 @@
+/* AccountInfo.css */
 .account-info-container {
   max-width: 480px;
   margin: 3rem auto;
   padding: 2rem;
   background: #ffffff;
   border-radius: 8px;
-  box-shadow: 0 8px 16px rgb(0 0 0 / 0.1);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: #333;
 }
 
-.account-title {
+.account-info-container h1 {
   font-size: 2rem;
   margin-bottom: 1.5rem;
   text-align: center;
-  color: #0d6efd; /* bootstrap primary blue */
+  color: #0d6efd;
 }
 
 .account-detail {
@@ -25,27 +26,46 @@
   border-bottom: 1px solid #e0e0e0;
 }
 
-.label {
+.account-detail strong {
   font-weight: 600;
   color: #555;
 }
 
-.value {
-  font-weight: 400;
-  color: #222;
-  max-width: 60%;
-  word-wrap: break-word;
-  text-align: right;
-}
-
-.id-scan-link {
+.account-detail a {
   color: #0d6efd;
   text-decoration: none;
   font-weight: 600;
 }
 
-.id-scan-link:hover {
+.account-detail a:hover {
   text-decoration: underline;
+}
+
+.logout-button {
+  width: 100%;
+  padding: 0.75rem;
+  margin-top: 2rem;
+  background-color: #0d6efd;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.logout-button:hover {
+  background-color: #0b5ed7;
+}
+
+.logout-button:active {
+  background-color: #0a58ca;
+}
+
+.logout-button:focus {
+  outline: 2px solid rgba(13, 110, 253, 0.5);
+  outline-offset: 2px;
 }
 
 .no-account-msg {

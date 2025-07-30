@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, act } from "react";
 import "../styles/Rides.css";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { useNavigate } from "react-router-dom";
 import "../fix-leaflet-icon";
-import * as signalR from "@microsoft/signalr";
+// import * as signalR from "@microsoft/signalr";
 
 const defaultCenter = [33.8938, 35.5018]; // Beirut coordinates
 
@@ -90,6 +90,53 @@ const PhoneNumberDropdown = ({ phoneNumber }) => {
 };
 
 const Rides = () => {
+  // Driver request modal state
+  const [showDriverModal, setShowDriverModal] = useState(false);
+  const [driverRequests, setDriverRequests] = useState([]); // { rideId, passengerName, status, requestId }
+  const [activeAccount, setActiveAccount] = useState(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
+  const prevRequestCount = useRef(0);
+  // On mount, get active account info (for driver/passenger logic)
+  useEffect(() => {
+    const stored = localStorage.getItem("activeAccount");
+    if (stored) {
+      try {
+        setActiveAccount(JSON.parse(stored));
+      } catch {}
+    }
+  }, []);
+  // Fetch ride requests for driver (rides they own)
+  const fetchDriverRequests = async (showNotification = true) => {
+    let activeAccountId = localStorage.getItem("activeAccountId");
+    activeAccountId = activeAccountId && !isNaN(Number(activeAccountId)) ? Number(activeAccountId) : null;
+    const driverId = activeAccountId && activeAccountId > 0 ? activeAccountId : (activeAccount?.id || 6);
+    console.log('[Polling] fetchDriverRequests called. driverId:', driverId, 'showNotification:', showNotification);
+    try {
+      const res = await fetch(`https://localhost:7221/api/Pooling/driverrequests?driverId=${driverId}`);
+      if (!res.ok) throw new Error("Failed to fetch driver ride requests");
+      const data = await res.json();
+      console.log('[Polling] API response for driver requests:', data);
+      setDriverRequests(data);
+      // Toast notification logic
+      if (showNotification && Array.isArray(data)) {
+        const pendingCount = data.filter(r => r.status === "Pending").length;
+        console.log('[Polling] pendingCount:', pendingCount, 'prevRequestCount:', prevRequestCount.current);
+        if (pendingCount > prevRequestCount.current) {
+          console.log('[Toast] Showing toast for new requests:', pendingCount);
+          setToastMsg(`You have ${pendingCount} new ride request${pendingCount > 1 ? 's' : ''}!`);
+          setShowToast(true);
+        } else if (pendingCount < prevRequestCount.current) {
+          console.log('[Toast] Pending count decreased or cleared. Hiding toast.');
+          setShowToast(false);
+        }
+        prevRequestCount.current = pendingCount;
+      }
+    } catch (err) {
+      setDriverRequests([]);
+      console.error('[Polling] Error fetching driver requests:', err);
+    }
+  };
   const LOCATIONIQ_API_KEY = "pk.04ae3b424787d702be2274b38a10e158";
   const SIGNALR_HUB_URL = "https://localhost:7221/hub/rideStatus";
 
@@ -120,9 +167,13 @@ const Rides = () => {
 
   // Fetch user's requested rides
   const fetchUserRequestedRides = async () => {
+    // Use the same userId logic as in handleRequestRide
+    let activeAccountId = localStorage.getItem("activeAccountId");
+    activeAccountId = activeAccountId && !isNaN(Number(activeAccountId)) ? Number(activeAccountId) : null;
+    const UserId = activeAccountId && activeAccountId > 0 ? activeAccountId : (activeAccount?.id || 6);
     try {
       const res = await fetch(
-        `https://localhost:7221/api/Pooling/userrequests?passengerId=6`
+        `https://localhost:7221/api/Pooling/userrequests?passengerId=${UserId}`
       );
       if (!res.ok) throw new Error("Failed to fetch your ride requests");
       const data = await res.json();
@@ -354,10 +405,13 @@ const Rides = () => {
 
   // Request a ride
   const handleRequestRide = async (ride) => {
+    let activeAccountId = localStorage.getItem("activeAccountId");
+activeAccountId = activeAccountId && !isNaN(Number(activeAccountId)) ? Number(activeAccountId) : null;
+const UserId = activeAccountId && activeAccountId > 0 ? activeAccountId : (activeAccount?.id || 6);
     try {
       const requestPayload = {
         rideId: ride.id,
-        userId: 6,
+        userId: UserId|| 6, // Fallback to 6 if no active account
       };
 
       const res = await fetch("https://localhost:7221/api/Pooling/request", {
@@ -393,9 +447,13 @@ const Rides = () => {
     if (!window.confirm("Are you sure you want to cancel this ride request?")) {
       return;
     }
+    // Use the same userId logic as in handleRequestRide
+    let activeAccountId = localStorage.getItem("activeAccountId");
+    activeAccountId = activeAccountId && !isNaN(Number(activeAccountId)) ? Number(activeAccountId) : null;
+    const UserId = activeAccountId && activeAccountId > 0 ? activeAccountId : (activeAccount?.id || 6);
     try {
       const res = await fetch(
-        `https://localhost:7221/api/Pooling/cancel?rideId=${ride.id}&userId=6`,
+        `https://localhost:7221/api/Pooling/cancel?rideId=${ride.id}&userId=${UserId}`,
         { method: "DELETE", headers: { "Content-Type": "application/json" } }
       );
 
@@ -470,55 +528,30 @@ const Rides = () => {
     if (!useManualPickup) clearStart();
   };
 
-  // SignalR: Connect to hub and listen for real-time ride status updates
+  // Poll for new driver requests every 10 seconds (if driver)
   useEffect(() => {
-    if (!startCoords) return;
-
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl(SIGNALR_HUB_URL)
-      .withAutomaticReconnect()
-      .build();
-
-    connectionRef.current = connection;
-
-    const startConnection = async () => {
-      try {
-        await connection.start();
-        console.log("SignalR Connected");
-
-        connection.on("RideStatusUpdated", (updatedRide) => {
-          console.log("Received RideStatusUpdated:", updatedRide);
-
-          setNearbyRides(prevRides => {
-            const idx = prevRides.findIndex(r => r.id === updatedRide.id);
-            if (idx !== -1) {
-              const newRides = [...prevRides];
-              newRides[idx] = { ...newRides[idx], ...updatedRide };
-              return newRides;
-            }
-            return prevRides;
-          });
-
-          setRequestedRides(prevRequests => {
-            if (prevRequests[updatedRide.id] !== updatedRide.status) {
-              return { ...prevRequests, [updatedRide.id]: updatedRide.status };
-            }
-            return prevRequests;
-          });
-        });
-      } catch (err) {
-        console.error("SignalR Connection Error:", err);
-      }
-    };
-
-    startConnection();
-
-    return () => {
-      if (connection) {
-        connection.stop().then(() => console.log("SignalR Disconnected"));
-      }
-    };
-  }, [startCoords]);
+    if (!(activeAccount && activeAccount.role === "driver")) {
+      console.log('[Polling] Not a driver or no activeAccount:', activeAccount);
+      return;
+    }
+    let activeAccountId = localStorage.getItem("activeAccountId");
+    activeAccountId = activeAccountId && !isNaN(Number(activeAccountId)) ? Number(activeAccountId) : null;
+    const driverId = activeAccountId && activeAccountId > 0 ? activeAccountId : (activeAccount?.id || 6);
+    console.log('[Polling] Driver polling effect started. activeAccount:', activeAccount, 'driverId:', driverId);
+    fetchDriverRequests(false); // Initial fetch, no toast
+    const interval = setInterval(() => {
+      console.log('[Polling] Polling for driver requests... activeAccount:', activeAccount, 'driverId:', driverId);
+      fetchDriverRequests();
+    }, 10000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line
+  }, [activeAccount]);
+  // Show driver modal if driver has pending requests
+  useEffect(() => {
+    if (activeAccount && activeAccount.role === "driver") {
+      fetchDriverRequests();
+    }
+  }, [activeAccount]);
 
   // Auto-refresh nearby rides fallback
   useEffect(() => {
@@ -544,6 +577,67 @@ const Rides = () => {
 
   return (
     <div className="rides-page-container">
+      
+
+      {/* Toast notification for new driver requests */}
+      {showToast && (
+        <div style={{
+          position: "fixed",
+          top: 30,
+          right: 30,
+          zIndex: 3000,
+          background: "#2563eb",
+          color: "#fff",
+          padding: "18px 28px",
+          borderRadius: 10,
+          boxShadow: "0 2px 12px rgba(0,0,0,0.18)",
+          fontWeight: 600,
+          fontSize: "1.1rem",
+          cursor: "pointer",
+          transition: "opacity 0.2s"
+        }}
+          onClick={() => { 
+            console.log('[Toast] Toast clicked. Opening modal and hiding toast.');
+            setShowDriverModal(true); setShowToast(false); 
+          }}
+        >
+          {toastMsg} <span style={{marginLeft:8, textDecoration:'underline'}}>View</span>
+          <span style={{marginLeft:16, fontWeight:400, fontSize:'0.95em'}}>Click to view</span>
+        </div>
+      )}
+
+      {/* Driver notification modal */}
+      {showDriverModal && activeAccount && activeAccount.role === "driver" && (
+        <div className="driver-modal-overlay" onClick={() => setShowDriverModal(false)}>
+          <div className="driver-modal" onClick={e => e.stopPropagation()}>
+            <h3>Incoming Ride Requests</h3>
+            {driverRequests.length === 0 ? (
+              <p>No pending requests.</p>
+            ) : (
+              <ul className="driver-requests-list">
+                {driverRequests.map(req => (
+                  <li key={req.requestId} className="driver-request-item">
+                    <span><strong>Passenger:</strong> {req.passengerName}</span>
+                    <span><strong>Status:</strong> {req.status}</span>
+                    <button
+                      onClick={() => handleDriverRespond(req.requestId, "Accepted")}
+                      disabled={req.status !== "Pending"}
+                      className="accept-btn"
+                    >Accept</button>
+                    <button
+                      onClick={() => handleDriverRespond(req.requestId, "Rejected")}
+                      disabled={req.status !== "Pending"}
+                      className="reject-btn"
+                    >Reject</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button onClick={() => setShowDriverModal(false)} className="close-modal-btn">Close</button>
+          </div>
+        </div>
+      )}
+
       <div className="rides-card">
         <div className="rides-header">
           <h2 className="rides-title">Find Available Rides</h2>
@@ -605,7 +699,7 @@ const Rides = () => {
                 </button>
               </div>
             ) : (
-              <div>
+              <div className="suggestions-container">
                 <input
                   type="text"
                   className="form-input"
@@ -615,17 +709,21 @@ const Rides = () => {
                   aria-label="Start Location"
                   required
                 />
-                {isStartSuggestionsVisible && startSuggestions.length > 0 && (
+                {isStartSuggestionsVisible && (
                   <ul className="suggestions-list">
-                    {startSuggestions.map(item => (
-                      <li
-                        key={item.place_id}
-                        onClick={() => handleStartSuggestionClick(item)}
-                        className="suggestion-item"
-                      >
-                        {item.display_name}
-                      </li>
-                    ))}
+                    {loadingStartSuggestions ? (
+                      <li className="suggestions-loading">Searching for locations...</li>
+                    ) : (
+                      startSuggestions.map(item => (
+                        <li
+                          key={item.place_id}
+                          onClick={() => handleStartSuggestionClick(item)}
+                          className="suggestion-item"
+                        >
+                          {item.display_name}
+                        </li>
+                      ))
+                    )}
                   </ul>
                 )}
               </div>
@@ -645,41 +743,40 @@ const Rides = () => {
           <div className="form-group">
             <label className="form-label">Dropoff Location</label>
             <div className="suggestions-container">
-              <div className="location-input-group">
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Enter dropoff location (e.g., Hamra, Beirut)"
-                  value={endLocation}
-                  onChange={handleEndLocationChange}
-                  aria-label="End Location"
-                  required
-                />
-                {endLocation && (
-                  <button
-                    type="button"
-                    onClick={clearEnd}
-                    className="clear-btn"
-                    aria-label="Clear end location"
-                  >
-                    &times;
-                  </button>
-                )}
-              </div>
-              {loadingSuggestions && (
-                <div className="suggestions-loading">Searching for locations...</div>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Enter dropoff location (e.g., Hamra, Beirut)"
+                value={endLocation}
+                onChange={handleEndLocationChange}
+                aria-label="End Location"
+                required
+              />
+              {endLocation && (
+                <button
+                  type="button"
+                  onClick={clearEnd}
+                  className="clear-btn"
+                  aria-label="Clear end location"
+                >
+                  &times;
+                </button>
               )}
-              {isSuggestionsVisible && endSuggestions.length > 0 && (
+              {isSuggestionsVisible && (
                 <ul className="suggestions-list">
-                  {endSuggestions.map((item) => (
-                    <li
-                      key={item.place_id}
-                      onClick={() => handleSuggestionClick(item)}
-                      className="suggestion-item"
-                    >
-                      {item.display_name}
-                    </li>
-                  ))}
+                  {loadingSuggestions ? (
+                    <li className="suggestions-loading">Searching for locations...</li>
+                  ) : (
+                    endSuggestions.map((item) => (
+                      <li
+                        key={item.place_id}
+                        onClick={() => handleSuggestionClick(item)}
+                        className="suggestion-item"
+                      >
+                        {item.display_name}
+                      </li>
+                    ))
+                  )}
                 </ul>
               )}
             </div>
@@ -785,6 +882,7 @@ const Rides = () => {
           })}
         </MapContainer>
       </div>
+
     </div>
   );
 };

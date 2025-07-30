@@ -388,15 +388,15 @@ export default function PostRide() {
       return;
     }
 
-    // Convert the local datetime to ISO string without timezone adjustment
-    const localDateTime = new Date(rideData.StartTime);
-    // Format as ISO string but keep the local time values
-    const isoStringWithoutTimezone = new Date(
-      localDateTime.getTime() - localDateTime.getTimezoneOffset() * 60000
-    ).toISOString().slice(0, 16);
+    // FIXED: Send datetime-local value in ISO format for proper backend parsing
+    // The datetime-local input gives us "2025-01-15T14:30"
+    // We need to add seconds to make it a complete ISO string: "2025-01-15T14:30:00"
+    const startTimeFormatted = rideData.StartTime.includes(':') && rideData.StartTime.split(':').length === 2 
+      ? rideData.StartTime + ':00' 
+      : rideData.StartTime;
 
     const newRide = {
-      UserId: 1,
+      UserId: activeAccount?.id,
       StartAddress: rideData.StartAddress.trim(),
       StartLat: parseFloat(rideData.StartLat),
       StartLon: parseFloat(rideData.StartLon),
@@ -405,7 +405,7 @@ export default function PostRide() {
       EndLon: parseFloat(rideData.EndLon),
       Fare: fareValue,
       AvailableSeats: seatsNumber,
-      StartTime: isoStringWithoutTimezone,
+      StartTime: startTimeFormatted, // Send properly formatted datetime
       PickupComment: useManualPickup ? rideData.PickupComment.trim() : null
     };
 

@@ -31,12 +31,20 @@ export const loginUser = async (credentials) => {
 
   localStorage.setItem("token", data.token);
   localStorage.setItem("userRole", data.user.role);
-  localStorage.setItem("userId", data.user.id);
+  const userId = Number(data.user.id);
+  localStorage.setItem("userId", userId);
+
+  const driverInfo = data.user.driverInfo || {};
 
   return {
     token: data.token,
     role: data.user.role,
     userId: data.user.id,
-    driverInfo: data.user.driverInfo || null
+    fullName: data.user.name || "",                    // map 'name' to 'fullName'
+    licenseNumber: driverInfo.LicenseNumber || "",
+    carPlate: driverInfo.CarPlate || "",
+    carModel: driverInfo.CarModel || "",
+    phoneNumber: driverInfo.PhoneNumber || "",
   };
 };
+

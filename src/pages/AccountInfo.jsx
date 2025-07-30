@@ -5,10 +5,10 @@ import "../styles/AccountInfo.css";
 
 export default function AccountInfo() {
   const { id } = useParams();
-  const { accounts, activeAccount, switchAccount, logoutActive } = useAuth();
+  const { accounts, logoutActive } = useAuth();
   const navigate = useNavigate();
 
-  const account = accounts.find((acc) => String(acc.id) === id);
+  const account = accounts.find((acc) => String(acc.id) === String(id));
 
   if (!account) {
     return (
@@ -19,12 +19,7 @@ export default function AccountInfo() {
   }
 
   const handleLogout = () => {
-    if (activeAccount && activeAccount.id === account.id) {
-      logoutActive();
-    } else {
-      switchAccount(account.id);
-      logoutActive();
-    }
+    logoutActive();
     setTimeout(() => {
       if (accounts.length > 1) {
         navigate("/accounts");
@@ -46,12 +41,12 @@ export default function AccountInfo() {
       <div className="account-detail">
         <strong>Role:</strong> {account.role}
       </div>
-      <div className="account-detail">
-        <strong>Phone Number:</strong> {account.phoneNumber || "N/A"}
-      </div>
 
       {account.role === "driver" && (
         <>
+          <div className="account-detail">
+            <strong>Phone Number:</strong> {account.phoneNumber || "N/A"}
+          </div>
           <div className="account-detail">
             <strong>License Number:</strong> {account.licenseNumber || "N/A"}
           </div>
@@ -78,17 +73,7 @@ export default function AccountInfo() {
 
       <button
         onClick={handleLogout}
-        style={{
-          marginTop: "2rem",
-          padding: "0.8rem 1.6rem",
-          backgroundColor: "#dc2626",
-          color: "white",
-          border: "none",
-          borderRadius: "6px",
-          cursor: "pointer",
-          fontWeight: "600",
-          fontSize: "1rem",
-        }}
+        className="logout-button"
         aria-label="Logout this account"
       >
         Logout This Account

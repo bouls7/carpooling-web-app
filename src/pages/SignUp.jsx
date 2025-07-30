@@ -43,6 +43,7 @@ export default function SignUp() {
     e.preventDefault();
 
     if (!isLoginMode) {
+      // Signup validation
       if (formData.password.length < 8) {
         showPopup("Password must be at least 8 characters long.");
         return;
@@ -80,13 +81,24 @@ export default function SignUp() {
 
     try {
       if (isLoginMode) {
-        const { token, role, userId } = await loginUser({
+        // Login flow with updated user info extraction
+        const {
+          token,
+          role,
+          userId,
+          fullName,
+          licenseNumber,
+          carPlate,
+          carModel,
+          phoneNumber,
+        } = await loginUser({
           email: formData.email,
           password: formData.password,
         });
 
         localStorage.setItem("token", token);
         localStorage.setItem("userRole", role);
+        console.log("User ID:", userId);
         localStorage.setItem("userId", userId);
 
         const existingAccount = accounts.find(
@@ -98,10 +110,14 @@ export default function SignUp() {
         } else {
           const newId = addAccount({
             email: formData.email,
-            fullName: formData.fullName || "",
+            fullName: fullName || formData.fullName || "",
             token,
             role,
             userId,
+            licenseNumber,
+            carPlate,
+            carModel,
+            phoneNumber,
           });
           switchAccount(newId);
         }
@@ -110,6 +126,7 @@ export default function SignUp() {
         return;
       }
 
+      // Signup flow
       const signupData = {
         Name: formData.fullName,
         Email: formData.email,
@@ -126,14 +143,22 @@ export default function SignUp() {
 
       await signupUser(signupData);
 
+      // Automatically login after signup
       const { token, role, userId } = await loginUser({
         email: formData.email,
         password: formData.password,
+
       });
 
       localStorage.setItem("token", token);
       localStorage.setItem("userRole", role);
-      localStorage.setItem("userId", userId);
+      const parsedUserId = Number(userId);
+if (!parsedUserId || isNaN(parsedUserId) || parsedUserId < 1) {
+  throw new Error("Invalid user ID received from server.");
+}
+console.log("User ID:", parsedUserId);
+localStorage.setItem("userId", parsedUserId);
+      
 
       const newId = addAccount({
         email: formData.email,
@@ -217,7 +242,9 @@ export default function SignUp() {
 
             <div className="role-selection">
               <div
-                className={`role-option ${formData.role === "passenger" ? "selected" : ""}`}
+                className={`role-option ${
+                  formData.role === "passenger" ? "selected" : ""
+                }`}
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, role: "passenger" }))
                 }
@@ -226,7 +253,9 @@ export default function SignUp() {
                 <div className="label">Passenger</div>
               </div>
               <div
-                className={`role-option ${formData.role === "driver" ? "selected" : ""}`}
+                className={`role-option ${
+                  formData.role === "driver" ? "selected" : ""
+                }`}
                 onClick={() =>
                   setFormData((prev) => ({ ...prev, role: "driver" }))
                 }

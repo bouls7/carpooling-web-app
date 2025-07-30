@@ -7,7 +7,7 @@ import PostRide from "./pages/PostRide";
 import SignUp from "./pages/SignUp";
 import RidesMap from "./pages/RidesMap.jsx";
 import DriverSignUp from "./pages/DriverSignUp.jsx";       
-import AdminDashboard from "./pages/AdminDashboard.jsx";    
+import AdminDashboard from "./pages/AdminPage.jsx";    
 import AccountInfo from "./pages/AccountInfo.jsx";          
 import { AuthProvider } from "./context/AuthContext";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -34,6 +34,7 @@ const App = () => {
           <Route path="/contact" element={<ContactUs />} />
           <Route path="/accounts" element={<AccountSelection />} />
           <Route path="/account-info/:id" element={<AccountInfo />} />
+          
 
           {/* New route for drivers to submit license/id scans */}
           <Route
@@ -48,15 +49,7 @@ const App = () => {
           />
 
           {/* New route for admin to verify drivers */}
-          <Route
-            path="admin-dashboard"
-            element={
-              <AdminDashboard
-                driverRequests={driverRequests}
-                setDriverRequests={setDriverRequests}
-              />
-            }
-          />
+      <Route path="admin" element={<AdminDashboard />} />
 
           {/* NEW: Route for Account Info page */}
           <Route path="account" element={<AccountInfo />} />

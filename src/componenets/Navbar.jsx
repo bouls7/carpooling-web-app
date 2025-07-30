@@ -71,6 +71,7 @@ export default function Navbar() {
                 Rides
               </NavLink>
             </li>
+
             {activeAccount.role === "driver" && (
               <li>
                 <NavLink
@@ -80,6 +81,19 @@ export default function Navbar() {
                   }
                 >
                   Post Ride
+                </NavLink>
+              </li>
+            )}
+
+            {activeAccount.role === "admin" && (
+              <li>
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) =>
+                    isActive ? "nav-link active" : "nav-link"
+                  }
+                >
+                  Admin Dashboard
                 </NavLink>
               </li>
             )}
